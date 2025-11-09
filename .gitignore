@@ -1,0 +1,139 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# Data Files (too large for git)
+data/raw/*.csv
+data/raw/*.json
+data/processed/*.csv
+data/processed/*.json
+data/synthetic/*.csv
+data/external/*
+!data/raw/sample_projects.csv
+!data/raw/*_template.*
+
+# Models (too large for git)
+models/ml/*.pkl
+models/ml/*.joblib
+models/scalers/*.pkl
+models/encoders/*.pkl
+!models/README.md
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/config.toml
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Documentation build artifacts
+docs/_build/
+site/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# API Keys and Secrets
+**/secrets.yaml
+**/secrets.json
+**/*_secret.*
+**/*_credentials.*
+
+# Large datasets
+*.h5
+*.hdf5
+*.parquet
+
+# Compiled files
+*.pyc
+*.pyo
+*.pyd
+
+# Package files
+*.whl
+*.tar.gz
+*.zip
+
+# Cache
+.cache/
+*.cache
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# Backup files
+*.bak
+*.backup
+

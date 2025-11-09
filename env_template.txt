@@ -1,0 +1,175 @@
+# PRISM Environment Variables Configuration
+# Copy this file to .env and fill in your actual values
+# NEVER commit the .env file to version control!
+
+# =============================================================================
+# OpenAI API Configuration (Required)
+# =============================================================================
+# Get your API key from: https://platform.openai.com/api-keys
+OPENAI_API_KEY=sk-your-api-key-here
+
+# Optional: Specify which model to use (default: gpt-3.5-turbo)
+# Options: gpt-3.5-turbo, gpt-4, gpt-4-turbo-preview
+OPENAI_MODEL=gpt-3.5-turbo
+
+# Optional: Set temperature for LLM responses (0.0 = deterministic, 1.0 = creative)
+OPENAI_TEMPERATURE=0.2
+
+# Optional: Maximum tokens per LLM request
+OPENAI_MAX_TOKENS=2000
+
+# =============================================================================
+# Application Configuration
+# =============================================================================
+# Environment: development, staging, production
+APP_ENV=development
+
+# Application secret key (generate with: python -c "import secrets; print(secrets.token_hex(32))")
+APP_SECRET_KEY=your-secret-key-here
+
+# Debug mode (true/false)
+DEBUG=true
+
+# =============================================================================
+# Data Storage Configuration
+# =============================================================================
+# Paths to data directories (relative to project root)
+DATA_RAW_DIR=data/raw
+DATA_PROCESSED_DIR=data/processed
+DATA_SYNTHETIC_DIR=data/synthetic
+MODELS_DIR=models
+
+# =============================================================================
+# Model Configuration
+# =============================================================================
+# ML Model hyperparameters (can be overridden via config files)
+ML_MODEL_TYPE=random_forest
+ML_N_ESTIMATORS=100
+ML_MAX_DEPTH=10
+ML_RANDOM_STATE=42
+
+# Feature engineering options
+FEATURE_SCALING=standard
+HANDLE_IMBALANCE=smote
+
+# =============================================================================
+# MCDA Configuration
+# =============================================================================
+# Default criteria weights (must sum to 1.0)
+MCDA_WEIGHT_ML_SCORE=0.40
+MCDA_WEIGHT_LLM_SENTIMENT=0.25
+MCDA_WEIGHT_SCHEDULE_PERF=0.15
+MCDA_WEIGHT_COST_PERF=0.10
+MCDA_WEIGHT_TEAM_STABILITY=0.10
+
+# MCDA method: topsis or ahp
+MCDA_METHOD=topsis
+
+# =============================================================================
+# Dashboard Configuration
+# =============================================================================
+# Streamlit server configuration
+STREAMLIT_SERVER_PORT=8501
+STREAMLIT_SERVER_ADDRESS=localhost
+STREAMLIT_SERVER_HEADLESS=false
+
+# Theme: light or dark
+STREAMLIT_THEME=light
+
+# Maximum file upload size (MB)
+MAX_UPLOAD_SIZE_MB=200
+
+# =============================================================================
+# Logging Configuration
+# =============================================================================
+# Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOG_LEVEL=INFO
+
+# Log file location
+LOG_FILE=logs/prism.log
+
+# Log format
+LOG_FORMAT=%(asctime)s - %(name)s - %(levelname)s - %(message)s
+
+# =============================================================================
+# Cache Configuration
+# =============================================================================
+# Enable response caching for LLM (reduces API costs)
+ENABLE_LLM_CACHE=true
+
+# Cache directory
+CACHE_DIR=.cache
+
+# Cache expiration (hours)
+CACHE_EXPIRATION_HOURS=24
+
+# =============================================================================
+# Performance Configuration
+# =============================================================================
+# Number of parallel workers for data processing
+N_WORKERS=4
+
+# Batch size for LLM API requests
+LLM_BATCH_SIZE=10
+
+# Timeout for API requests (seconds)
+API_TIMEOUT=30
+
+# =============================================================================
+# Testing Configuration
+# =============================================================================
+# Use mock LLM responses in tests (to avoid API costs)
+USE_MOCK_LLM_IN_TESTS=true
+
+# Path to test data
+TEST_DATA_DIR=tests/test_data
+
+# =============================================================================
+# Database Configuration (Optional - for future features)
+# =============================================================================
+# If implementing persistent storage, configure database here
+# DATABASE_URL=sqlite:///prism.db
+# DATABASE_ECHO=false
+
+# =============================================================================
+# Security Configuration
+# =============================================================================
+# API rate limiting (requests per minute)
+RATE_LIMIT_PER_MINUTE=60
+
+# Session timeout (minutes)
+SESSION_TIMEOUT_MINUTES=30
+
+# =============================================================================
+# Feature Flags (Optional - for gradual feature rollout)
+# =============================================================================
+# Enable/disable specific features
+FEATURE_ML_PREDICTIONS=true
+FEATURE_LLM_ANALYSIS=true
+FEATURE_MCDA_RANKING=true
+FEATURE_CHAT_ASSISTANT=true
+FEATURE_PDF_EXPORT=true
+FEATURE_SENSITIVITY_ANALYSIS=true
+
+# =============================================================================
+# External Services (Optional - for future integrations)
+# =============================================================================
+# Email notifications (future feature)
+# SMTP_HOST=smtp.gmail.com
+# SMTP_PORT=587
+# SMTP_USER=your-email@gmail.com
+# SMTP_PASSWORD=your-app-password
+
+# Slack integration (future feature)
+# SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+
+# =============================================================================
+# Notes
+# =============================================================================
+# 1. Required variables: OPENAI_API_KEY (minimum to run the system)
+# 2. Most other variables have sensible defaults in the code
+# 3. Variables prefixed with # are commented out (optional/future features)
+# 4. For production deployment, set APP_ENV=production and DEBUG=false
+# 5. Regenerate APP_SECRET_KEY for each deployment environment
+# 6. Monitor OPENAI_API_KEY usage to stay within budget limits
+
