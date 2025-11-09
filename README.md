@@ -308,7 +308,7 @@ streamlit run app/app.py
 
 ## 📊 Project Status
 
-### Current Phase: **Development & Documentation** (November 2024)
+### Current Phase: **Development & Documentation** (November 2025)
 
 This repository currently contains:
 - ✅ Complete project strategy and implementation plan
@@ -334,7 +334,7 @@ This repository currently contains:
 | **Phase 7:** Chat Assistant | Week 16 | Conversational AI, Explanations, Q&A | Upcoming |
 | **Phase 8:** Testing & Documentation | Weeks 17-18 | UAT, Performance testing, Final report | Upcoming |
 
-**Expected Completion:** January 2025
+**Expected Completion:** February 2026
 
 ### Capstone Milestones
 
@@ -386,7 +386,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 **Project Author:** [Your Name]  
 **Institution:** [Your University], Department of [Computer Science / Information Systems]  
-**Program:** Final Year Capstone Project (2024-2025)  
+**Program:** Final Year Capstone Project (2025-2026)  
 **Email:** [your.email@example.com]  
 **LinkedIn:** [Your LinkedIn Profile]  
 **GitHub:** [@yourusername](https://github.com/yourusername)
@@ -422,11 +422,11 @@ This project was inspired by:
 If you use PRISM or reference this work in academic publications, please cite:
 
 ```bibtex
-@mastersthesis{prism2024,
+@mastersthesis{prism2025,
   author = {Your Name},
   title = {A Hybrid Predictive Framework Integrating Machine Learning and Language Models for Software Project Risk Analysis},
   school = {Your University},
-  year = {2024-2025},
+  year = {2022-2026},
   type = {Final Year Capstone Project},
   url = {https://github.com/yourusername/prism}
 }
