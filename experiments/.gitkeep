@@ -1,0 +1,7 @@
+# Experiments directory
+# Use this for experimental code that is not production-ready
+#
+# Subdirectories:
+# - alternative_algorithms/
+# - prompt_variations/
+# - ui_prototypes/

@@ -1,0 +1,5 @@
+# Categorical Encoders Directory
+# 
+# Serialized encoder objects:
+# - label_encoder.pkl
+# - onehot_encoder.pkl

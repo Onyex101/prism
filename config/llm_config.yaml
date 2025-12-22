@@ -1,0 +1,158 @@
+# PRISM LLM Configuration
+# Settings for Large Language Model integration
+
+# ==============================================================================
+# OpenAI API Settings
+# ==============================================================================
+openai:
+  model: "gpt-3.5-turbo"  # Options: gpt-3.5-turbo, gpt-4, gpt-4-turbo
+  max_tokens: 2000
+  temperature: 0.0  # 0.0 for deterministic outputs
+  top_p: 1.0
+  frequency_penalty: 0.0
+  presence_penalty: 0.0
+  timeout: 30  # seconds
+  max_retries: 3
+  retry_delay: 1  # seconds
+
+# ==============================================================================
+# Cost Management
+# ==============================================================================
+cost:
+  # Token limits per request
+  max_input_tokens: 3000
+  max_output_tokens: 1000
+  
+  # Cost per 1K tokens (as of Dec 2024)
+  pricing:
+    gpt-3.5-turbo:
+      input: 0.0005
+      output: 0.0015
+    gpt-4:
+      input: 0.03
+      output: 0.06
+    gpt-4-turbo:
+      input: 0.01
+      output: 0.03
+
+  # Budget limits
+  max_cost_per_project: 0.15  # USD
+  max_daily_cost: 10.00  # USD
+
+# ==============================================================================
+# Caching
+# ==============================================================================
+cache:
+  enabled: true
+  path: ".cache/llm_responses"
+  max_age_hours: 168  # 7 days
+  hash_algorithm: "sha256"
+
+# ==============================================================================
+# Risk Extraction Prompt
+# ==============================================================================
+prompts:
+  risk_extraction:
+    system: |
+      You are an expert project risk analyst. Your task is to analyze project status 
+      comments and identify potential risks. Be objective and evidence-based.
+      
+      Focus on these risk categories:
+      1. Technical: Code quality, architecture, technical debt, technology issues
+      2. Resource: Staffing, skills, availability, team capacity
+      3. Schedule: Timeline concerns, delays, dependencies, blockers
+      4. Scope: Requirement changes, feature creep, unclear specifications
+      5. Budget: Cost overruns, resource allocation, financial concerns
+      
+      Always provide structured output in the exact JSON format requested.
+
+    user: |
+      Analyze the following project status comments and extract risk indicators.
+      
+      Project: {project_name}
+      Comments: {status_comments}
+      
+      Respond with a JSON object containing:
+      {{
+        "sentiment_score": <float between -1.0 and 1.0>,
+        "sentiment_label": "<positive|neutral|negative>",
+        "risk_level": "<low|medium|high>",
+        "risk_categories": ["<list of detected risk categories>"],
+        "risk_indicators": ["<specific concerns extracted from text>"],
+        "key_quotes": ["<relevant quotes from the comments>"],
+        "confidence": <float between 0.0 and 1.0>,
+        "summary": "<one sentence summary of overall project health>"
+      }}
+
+  recommendation:
+    system: |
+      You are an expert project management consultant. Based on risk analysis data,
+      provide actionable recommendations to reduce project risk.
+      
+      Consider:
+      - Immediate actions (this week)
+      - Short-term actions (this month)
+      - Long-term improvements
+      - Resource implications
+      
+      Be specific and practical.
+
+    user: |
+      Based on the following risk analysis for {project_name}:
+      
+      Risk Score: {risk_score}
+      Risk Categories: {risk_categories}
+      Risk Indicators: {risk_indicators}
+      
+      Provide specific recommendations to reduce risk.
+
+  chat_assistant:
+    system: |
+      You are PRISM, an AI assistant for software project risk analysis. 
+      You help project managers understand risk predictions and make data-driven decisions.
+      
+      You have access to:
+      - ML model predictions and feature importance
+      - LLM-extracted risk indicators from project comments
+      - MCDA rankings comparing multiple projects
+      
+      Be helpful, concise, and always back up your answers with data from the analysis.
+      If you don't have information about something, say so clearly.
+
+# ==============================================================================
+# Output Parsing
+# ==============================================================================
+parsing:
+  # Expected response format
+  response_format: "json"
+  
+  # Validation rules
+  validation:
+    sentiment_score:
+      min: -1.0
+      max: 1.0
+    confidence:
+      min: 0.0
+      max: 1.0
+    risk_level:
+      allowed: ["low", "medium", "high"]
+    sentiment_label:
+      allowed: ["positive", "neutral", "negative"]
+
+  # Fallback values for parsing errors
+  fallbacks:
+    sentiment_score: 0.0
+    sentiment_label: "neutral"
+    risk_level: "medium"
+    risk_categories: []
+    risk_indicators: ["Unable to parse risk indicators"]
+    confidence: 0.0
+
+# ==============================================================================
+# Batch Processing
+# ==============================================================================
+batch:
+  enabled: true
+  batch_size: 10  # Projects per batch
+  delay_between_batches: 1.0  # seconds
+  parallel_requests: 5  # Concurrent API calls

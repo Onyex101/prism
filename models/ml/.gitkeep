@@ -1,0 +1,8 @@
+# Machine Learning Models Directory
+# 
+# Trained model files will be stored here:
+# - random_forest_v1.pkl
+# - xgboost_v1.pkl
+# - best_model.pkl (production model)
+#
+# Note: Model files are gitignored due to size

@@ -1,0 +1,6 @@
+# This directory contains synthetically generated test data
+# 
+# Generated data is used for:
+# - Initial model development and testing
+# - Demonstrations when real data is not available
+# - Augmenting training data for class balance

@@ -1,0 +1,6 @@
+{
+  "registry_version": "1.0",
+  "created_at": "2024-12-22",
+  "models": [],
+  "notes": "Model registry tracking all trained models, their versions, and performance metrics. Populated automatically during training."
+}

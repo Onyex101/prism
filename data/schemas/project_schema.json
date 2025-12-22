@@ -1,0 +1,191 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PRISM Project Data Schema",
+  "description": "Schema for software project data used in risk analysis",
+  "type": "object",
+  "required": [
+    "project_id",
+    "project_name",
+    "start_date",
+    "planned_end_date",
+    "budget",
+    "spent",
+    "planned_hours",
+    "actual_hours",
+    "team_size",
+    "completion_rate",
+    "status",
+    "status_comments"
+  ],
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Unique identifier for the project",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "examples": ["PROJ-2024-001", "ALPHA-123"]
+    },
+    "project_name": {
+      "type": "string",
+      "description": "Descriptive name of the project",
+      "minLength": 3,
+      "maxLength": 200,
+      "examples": ["Mobile App Redesign", "API Gateway Migration"]
+    },
+    "project_type": {
+      "type": "string",
+      "description": "Category of the project",
+      "enum": ["New Development", "Enhancement", "Maintenance", "Migration", "Integration", "Research", "Other"],
+      "default": "New Development"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Project start date in YYYY-MM-DD format",
+      "examples": ["2024-01-15"]
+    },
+    "planned_end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Target completion date in YYYY-MM-DD format",
+      "examples": ["2024-06-30"]
+    },
+    "actual_end_date": {
+      "type": ["string", "null"],
+      "format": "date",
+      "description": "Actual completion date (null if not completed)",
+      "examples": ["2024-07-15", null]
+    },
+    "budget": {
+      "type": "number",
+      "description": "Total project budget in USD",
+      "minimum": 0,
+      "examples": [150000.00]
+    },
+    "spent": {
+      "type": "number",
+      "description": "Current spend in USD",
+      "minimum": 0,
+      "examples": [125000.00]
+    },
+    "planned_hours": {
+      "type": "integer",
+      "description": "Estimated total effort in hours",
+      "minimum": 1,
+      "examples": [2000]
+    },
+    "actual_hours": {
+      "type": "integer",
+      "description": "Actual logged time in hours",
+      "minimum": 0,
+      "examples": [2300]
+    },
+    "team_size": {
+      "type": "integer",
+      "description": "Number of team members",
+      "minimum": 1,
+      "maximum": 100,
+      "examples": [8]
+    },
+    "completion_rate": {
+      "type": "number",
+      "description": "Percentage complete (0-100)",
+      "minimum": 0,
+      "maximum": 100,
+      "examples": [75.5]
+    },
+    "status": {
+      "type": "string",
+      "description": "Current project status",
+      "enum": ["Active", "On Hold", "Completed", "Cancelled", "Planning"],
+      "default": "Active"
+    },
+    "priority": {
+      "type": "string",
+      "description": "Business priority level",
+      "enum": ["Critical", "High", "Medium", "Low"],
+      "default": "Medium"
+    },
+    "methodology": {
+      "type": "string",
+      "description": "Development methodology",
+      "enum": ["Agile", "Waterfall", "Hybrid", "Kanban", "Other"],
+      "default": "Agile"
+    },
+    "department": {
+      "type": "string",
+      "description": "Owning department or team",
+      "examples": ["Engineering", "Product", "IT", "Data Science"]
+    },
+    "client_type": {
+      "type": "string",
+      "description": "Type of client/stakeholder",
+      "enum": ["Internal", "External", "Both"],
+      "default": "Internal"
+    },
+    "technology_stack": {
+      "type": "string",
+      "description": "Technologies used in the project",
+      "examples": ["Python, React, PostgreSQL"]
+    },
+    "complexity_score": {
+      "type": "integer",
+      "description": "Subjective complexity rating (1-10)",
+      "minimum": 1,
+      "maximum": 10,
+      "examples": [7]
+    },
+    "dependencies": {
+      "type": "integer",
+      "description": "Number of external dependencies",
+      "minimum": 0,
+      "examples": [3]
+    },
+    "velocity": {
+      "type": "number",
+      "description": "Story points completed per sprint",
+      "minimum": 0,
+      "examples": [42.5]
+    },
+    "defect_rate": {
+      "type": "number",
+      "description": "Defects per feature/story",
+      "minimum": 0,
+      "examples": [0.08]
+    },
+    "team_turnover": {
+      "type": "number",
+      "description": "Team turnover rate (0-1)",
+      "minimum": 0,
+      "maximum": 1,
+      "examples": [0.125]
+    },
+    "risk_level": {
+      "type": "string",
+      "description": "Initial risk assessment",
+      "enum": ["High", "Medium", "Low"],
+      "default": "Medium"
+    },
+    "status_comments": {
+      "type": "string",
+      "description": "Recent status updates and comments (min 100 chars recommended)",
+      "minLength": 10,
+      "examples": ["Sprint 12 complete. Testing environment issues delaying QA. Team concerned about unclear acceptance criteria."]
+    },
+    "project_description": {
+      "type": "string",
+      "description": "Initial project goals and description",
+      "examples": ["Redesign the mobile app to improve user experience and add new features."]
+    },
+    "team_feedback": {
+      "type": "string",
+      "description": "Team retrospective notes and feedback",
+      "examples": ["Team morale is high. Some concerns about technical debt in legacy modules."]
+    },
+    "stakeholder_notes": {
+      "type": "string",
+      "description": "Client or sponsor feedback",
+      "examples": ["Stakeholder satisfied with progress. Requested minor scope changes."]
+    }
+  },
+  "additionalProperties": true
+}

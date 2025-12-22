@@ -1,0 +1,5 @@
+# Feature Scalers Directory
+# 
+# Serialized scaler objects:
+# - standard_scaler.pkl
+# - minmax_scaler.pkl

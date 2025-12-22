@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "numerical_features": [
+    "budget",
+    "spent",
+    "planned_hours",
+    "actual_hours",
+    "team_size",
+    "completion_rate",
+    "complexity_score",
+    "dependencies",
+    "velocity",
+    "defect_rate",
+    "team_turnover"
+  ],
+  "derived_features": [
+    "schedule_variance",
+    "cost_variance",
+    "schedule_performance_index",
+    "cost_performance_index",
+    "burn_rate",
+    "completion_velocity",
+    "budget_utilization",
+    "hours_variance_pct"
+  ],
+  "categorical_features": [
+    "project_type",
+    "status",
+    "priority",
+    "methodology",
+    "department",
+    "client_type",
+    "risk_level"
+  ],
+  "text_features": [
+    "status_comments",
+    "project_description",
+    "team_feedback",
+    "stakeholder_notes"
+  ],
+  "target_variable": "risk_category",
+  "notes": "Feature names used by the ML pipeline. Update this file when adding new features."
+}

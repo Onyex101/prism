@@ -1,0 +1,7 @@
+# This directory contains raw, immutable source data
+# Files in this directory should not be modified after initial collection
+# 
+# Expected files:
+# - sample_projects.csv (demo dataset)
+# - jira_export_template.csv
+# - azure_export_template.json

@@ -1,0 +1,6 @@
+# This directory contains cleaned, transformed data ready for modeling
+# 
+# Expected files after processing:
+# - train.csv (training dataset)
+# - validation.csv (validation dataset)
+# - test.csv (test dataset)

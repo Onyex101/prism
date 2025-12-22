@@ -1,0 +1,199 @@
+# PRISM Data Validation Rules
+# Rules for ensuring data quality before analysis
+
+# ==============================================================================
+# Required Fields Validation
+# ==============================================================================
+required_fields:
+  - project_id
+  - project_name
+  - start_date
+  - planned_end_date
+  - budget
+  - spent
+  - planned_hours
+  - actual_hours
+  - team_size
+  - completion_rate
+  - status
+  - status_comments
+
+# ==============================================================================
+# Field-Level Validation Rules
+# ==============================================================================
+field_rules:
+  project_id:
+    type: string
+    unique: true
+    min_length: 1
+    max_length: 50
+    pattern: "^[A-Za-z0-9_-]+$"
+    error_message: "Project ID must be alphanumeric with dashes/underscores only"
+
+  project_name:
+    type: string
+    min_length: 3
+    max_length: 200
+    error_message: "Project name must be 3-200 characters"
+
+  start_date:
+    type: date
+    format: "YYYY-MM-DD"
+    error_message: "Start date must be in YYYY-MM-DD format"
+
+  planned_end_date:
+    type: date
+    format: "YYYY-MM-DD"
+    must_be_after: start_date
+    error_message: "Planned end date must be after start date"
+
+  actual_end_date:
+    type: date
+    format: "YYYY-MM-DD"
+    nullable: true
+    must_be_after: start_date
+    error_message: "Actual end date must be after start date"
+
+  budget:
+    type: number
+    min: 0
+    max: 100000000  # $100M cap
+    error_message: "Budget must be a positive number"
+
+  spent:
+    type: number
+    min: 0
+    max: 100000000
+    error_message: "Spent must be a positive number"
+
+  planned_hours:
+    type: integer
+    min: 1
+    max: 1000000
+    error_message: "Planned hours must be a positive integer"
+
+  actual_hours:
+    type: integer
+    min: 0
+    max: 1000000
+    error_message: "Actual hours must be a non-negative integer"
+
+  team_size:
+    type: integer
+    min: 1
+    max: 100
+    error_message: "Team size must be between 1 and 100"
+
+  completion_rate:
+    type: number
+    min: 0
+    max: 100
+    error_message: "Completion rate must be between 0 and 100"
+
+  status:
+    type: categorical
+    allowed_values:
+      - Active
+      - On Hold
+      - Completed
+      - Cancelled
+      - Planning
+    case_insensitive: true
+    error_message: "Status must be one of: Active, On Hold, Completed, Cancelled, Planning"
+
+  priority:
+    type: categorical
+    allowed_values:
+      - Critical
+      - High
+      - Medium
+      - Low
+    case_insensitive: true
+    nullable: true
+    default: Medium
+
+  status_comments:
+    type: string
+    min_length: 10
+    recommended_min_length: 100
+    warning_message: "Status comments should be at least 100 characters for better LLM analysis"
+
+# ==============================================================================
+# Cross-Field Validation Rules
+# ==============================================================================
+cross_field_rules:
+  - name: "end_date_after_start"
+    condition: "planned_end_date > start_date"
+    error_message: "Planned end date must be after start date"
+
+  - name: "actual_end_implies_completed"
+    condition: "actual_end_date IS NOT NULL IMPLIES status IN ('Completed', 'Cancelled')"
+    warning_message: "Actual end date set but status is not Completed or Cancelled"
+
+  - name: "completion_100_implies_done"
+    condition: "completion_rate == 100 IMPLIES status == 'Completed'"
+    warning_message: "Completion rate is 100% but status is not Completed"
+
+  - name: "spent_reasonable"
+    condition: "spent <= budget * 2"
+    warning_message: "Spent is more than 2x the budget - please verify"
+
+  - name: "hours_reasonable"
+    condition: "actual_hours <= planned_hours * 3"
+    warning_message: "Actual hours is more than 3x planned - please verify"
+
+# ==============================================================================
+# Data Quality Metrics
+# ==============================================================================
+quality_thresholds:
+  # Minimum completeness per column
+  min_completeness: 0.80  # 80% non-null values
+  
+  # Maximum missing values overall
+  max_missing_pct: 0.20  # 20% max missing
+  
+  # Minimum dataset size
+  min_projects: 10
+  recommended_min_projects: 50
+  
+  # Text quality
+  min_text_length: 10
+  recommended_text_length: 100
+
+# ==============================================================================
+# Outlier Detection Rules
+# ==============================================================================
+outlier_rules:
+  method: "iqr"
+  iqr_multiplier: 1.5
+  
+  fields_to_check:
+    - budget
+    - spent
+    - planned_hours
+    - actual_hours
+    - team_size
+    - velocity
+    - defect_rate
+
+  action: "flag"  # Options: flag, cap, remove
+
+# ==============================================================================
+# Warning vs Error Classification
+# ==============================================================================
+severity:
+  errors:
+    # These will block analysis
+    - missing_required_field
+    - invalid_date_format
+    - duplicate_project_id
+    - negative_values
+    - invalid_completion_rate
+    
+  warnings:
+    # These will show warnings but allow analysis
+    - missing_optional_field
+    - short_text_fields
+    - outlier_values
+    - inconsistent_status
+    - low_completeness

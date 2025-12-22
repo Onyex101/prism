@@ -1,0 +1,159 @@
+# PRISM MCDA Configuration
+# Multi-Criteria Decision Analysis settings
+
+# ==============================================================================
+# Algorithm Selection
+# ==============================================================================
+algorithm:
+  primary: "topsis"  # Options: topsis, ahp, vikor, promethee
+  normalize: true
+  
+# ==============================================================================
+# Criteria Definition
+# ==============================================================================
+criteria:
+  # Each criterion has:
+  # - weight: importance (0-1, must sum to 1)
+  # - type: benefit (higher is better) or cost (lower is better)
+  # - source: where the value comes from (ml, llm, metric, derived)
+
+  ml_risk_score:
+    weight: 0.40
+    type: cost  # Lower risk score is better
+    source: ml
+    description: "Machine learning model risk prediction"
+    range: [0.0, 1.0]
+
+  llm_sentiment_score:
+    weight: 0.25
+    type: benefit  # Higher sentiment is better (positive)
+    source: llm
+    description: "LLM-extracted sentiment from comments"
+    range: [-1.0, 1.0]
+    transform: "shift"  # Shift to 0-1 range: (x + 1) / 2
+
+  schedule_performance_index:
+    weight: 0.15
+    type: benefit  # Higher SPI is better
+    source: metric
+    description: "Schedule Performance Index (planned/actual hours)"
+    range: [0.0, 2.0]
+    cap: 2.0  # Cap extreme values
+
+  cost_performance_index:
+    weight: 0.10
+    type: benefit  # Higher CPI is better
+    source: metric
+    description: "Cost Performance Index (budget/spent)"
+    range: [0.0, 2.0]
+    cap: 2.0
+
+  team_stability:
+    weight: 0.10
+    type: benefit  # Higher stability is better
+    source: derived
+    description: "Team stability (1 - turnover rate)"
+    range: [0.0, 1.0]
+    calculation: "1 - team_turnover"
+
+# ==============================================================================
+# Alternative Weight Profiles
+# ==============================================================================
+weight_profiles:
+  # Default balanced profile
+  balanced:
+    ml_risk_score: 0.40
+    llm_sentiment_score: 0.25
+    schedule_performance_index: 0.15
+    cost_performance_index: 0.10
+    team_stability: 0.10
+
+  # ML-heavy profile (trust numbers more)
+  quantitative:
+    ml_risk_score: 0.50
+    llm_sentiment_score: 0.15
+    schedule_performance_index: 0.15
+    cost_performance_index: 0.15
+    team_stability: 0.05
+
+  # LLM-heavy profile (trust text analysis more)
+  qualitative:
+    ml_risk_score: 0.30
+    llm_sentiment_score: 0.40
+    schedule_performance_index: 0.10
+    cost_performance_index: 0.10
+    team_stability: 0.10
+
+  # Schedule-focused profile
+  schedule_focused:
+    ml_risk_score: 0.25
+    llm_sentiment_score: 0.20
+    schedule_performance_index: 0.35
+    cost_performance_index: 0.10
+    team_stability: 0.10
+
+  # Cost-focused profile
+  cost_focused:
+    ml_risk_score: 0.25
+    llm_sentiment_score: 0.15
+    schedule_performance_index: 0.15
+    cost_performance_index: 0.35
+    team_stability: 0.10
+
+# ==============================================================================
+# TOPSIS Settings
+# ==============================================================================
+topsis:
+  normalization: "vector"  # Options: vector, minmax, max
+  distance_metric: "euclidean"  # Options: euclidean, manhattan, chebyshev
+  ideal_solution: "max"  # How to determine ideal solution
+
+# ==============================================================================
+# Sensitivity Analysis
+# ==============================================================================
+sensitivity:
+  enabled: true
+  weight_variation: 0.10  # ±10% weight changes
+  iterations: 100
+  metrics:
+    - kendall_tau
+    - spearman_rho
+    - top_k_stability
+
+# ==============================================================================
+# Risk Classification Thresholds
+# ==============================================================================
+thresholds:
+  # Based on final MCDA score (0-1, where 1 is best)
+  high_risk:
+    max: 0.40  # Score below 0.40 = high risk
+    color: "#FF4B4B"
+    label: "High Risk"
+    
+  medium_risk:
+    min: 0.40
+    max: 0.70  # Score between 0.40-0.70 = medium risk
+    color: "#FFA500"
+    label: "Medium Risk"
+    
+  low_risk:
+    min: 0.70  # Score above 0.70 = low risk
+    color: "#00CC66"
+    label: "Low Risk"
+
+# ==============================================================================
+# Output Settings
+# ==============================================================================
+output:
+  # Ranking output
+  include_scores: true
+  include_breakdown: true
+  include_rank: true
+  
+  # Decimal precision
+  score_precision: 4
+  weight_precision: 2
+  
+  # Sorting
+  sort_by: "rank"  # Options: rank, risk_score, name
+  sort_ascending: true

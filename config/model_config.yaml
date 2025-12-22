@@ -1,0 +1,187 @@
+# PRISM ML Model Configuration
+# Hyperparameters and settings for machine learning models
+
+# ==============================================================================
+# General Settings
+# ==============================================================================
+general:
+  random_state: 42
+  test_size: 0.2
+  validation_size: 0.2
+  cv_folds: 5
+  scoring_metric: "roc_auc"
+
+# ==============================================================================
+# Feature Engineering
+# ==============================================================================
+features:
+  # Numerical features to use
+  numerical:
+    - budget
+    - spent
+    - planned_hours
+    - actual_hours
+    - team_size
+    - completion_rate
+    - schedule_variance
+    - cost_variance
+    - velocity
+    - defect_rate
+    - team_turnover
+    - dependencies
+    - complexity_score
+
+  # Categorical features to encode
+  categorical:
+    - project_type
+    - methodology
+    - priority
+    - status
+    - client_type
+    - department
+
+  # Derived features to calculate
+  derived:
+    - schedule_performance_index  # planned_hours / actual_hours
+    - cost_performance_index      # budget / spent
+    - burn_rate                   # spent / days_elapsed
+    - completion_velocity         # completion_rate / days_elapsed
+
+  # Text features for sentiment extraction
+  text:
+    - status_comments
+    - project_description
+    - team_feedback
+
+# ==============================================================================
+# Preprocessing
+# ==============================================================================
+preprocessing:
+  # Handling missing values
+  missing_values:
+    numerical_strategy: "median"
+    categorical_strategy: "most_frequent"
+    text_strategy: "empty_string"
+
+  # Scaling
+  scaling:
+    method: "standard"  # Options: standard, minmax, robust
+    
+  # Encoding
+  encoding:
+    categorical_method: "onehot"  # Options: onehot, ordinal, target
+    max_categories: 10
+
+  # Outlier handling
+  outliers:
+    method: "iqr"  # Options: iqr, zscore, none
+    iqr_multiplier: 1.5
+    zscore_threshold: 3.0
+
+# ==============================================================================
+# Random Forest Configuration
+# ==============================================================================
+random_forest:
+  enabled: true
+  hyperparameters:
+    n_estimators: 100
+    max_depth: 10
+    min_samples_split: 5
+    min_samples_leaf: 2
+    max_features: "sqrt"
+    class_weight: "balanced"
+    n_jobs: -1
+
+  # Grid search parameters
+  grid_search:
+    enabled: true
+    param_grid:
+      n_estimators: [50, 100, 200]
+      max_depth: [5, 10, 15, null]
+      min_samples_split: [2, 5, 10]
+
+# ==============================================================================
+# XGBoost Configuration
+# ==============================================================================
+xgboost:
+  enabled: true
+  hyperparameters:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    scale_pos_weight: 1.0
+    use_label_encoder: false
+    eval_metric: "logloss"
+
+  grid_search:
+    enabled: true
+    param_grid:
+      n_estimators: [50, 100, 200]
+      max_depth: [3, 6, 9]
+      learning_rate: [0.01, 0.1, 0.2]
+
+# ==============================================================================
+# LightGBM Configuration
+# ==============================================================================
+lightgbm:
+  enabled: true
+  hyperparameters:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    num_leaves: 31
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    class_weight: "balanced"
+    verbose: -1
+
+# ==============================================================================
+# Neural Network Configuration
+# ==============================================================================
+neural_network:
+  enabled: false  # Disabled by default for POC
+  hyperparameters:
+    hidden_layers: [64, 32]
+    activation: "relu"
+    dropout_rate: 0.3
+    learning_rate: 0.001
+    batch_size: 32
+    epochs: 100
+    early_stopping_patience: 10
+
+# ==============================================================================
+# Class Imbalance Handling
+# ==============================================================================
+imbalance:
+  method: "smote"  # Options: smote, adasyn, random_oversample, class_weight, none
+  smote:
+    sampling_strategy: "auto"
+    k_neighbors: 5
+
+# ==============================================================================
+# Model Selection
+# ==============================================================================
+model_selection:
+  primary_model: "random_forest"
+  comparison_metrics:
+    - roc_auc
+    - f1
+    - precision
+    - recall
+    - accuracy
+
+# ==============================================================================
+# Model Persistence
+# ==============================================================================
+persistence:
+  save_path: "models/ml"
+  model_filename: "best_model.pkl"
+  scaler_filename: "scaler.pkl"
+  encoder_filename: "encoder.pkl"
+  feature_names_filename: "feature_names.json"

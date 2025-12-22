@@ -1,0 +1,98 @@
+# PRISM Logging Configuration
+
+# ==============================================================================
+# Loguru Settings
+# ==============================================================================
+loguru:
+  # Log format
+  format: "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+  
+  # Log levels by environment
+  levels:
+    development: "DEBUG"
+    staging: "INFO"
+    production: "WARNING"
+
+# ==============================================================================
+# Log Sinks (Outputs)
+# ==============================================================================
+sinks:
+  # Console output
+  console:
+    enabled: true
+    level: "DEBUG"
+    colorize: true
+    
+  # File output - general logs
+  file:
+    enabled: true
+    path: "logs/prism_{time:YYYY-MM-DD}.log"
+    level: "INFO"
+    rotation: "10 MB"
+    retention: "30 days"
+    compression: "zip"
+    
+  # File output - errors only
+  error_file:
+    enabled: true
+    path: "logs/errors_{time:YYYY-MM-DD}.log"
+    level: "ERROR"
+    rotation: "10 MB"
+    retention: "90 days"
+    compression: "zip"
+
+# ==============================================================================
+# Module-Specific Logging
+# ==============================================================================
+modules:
+  # Data processing
+  data:
+    level: "INFO"
+    
+  # ML models
+  ml:
+    level: "INFO"
+    
+  # LLM integration
+  llm:
+    level: "DEBUG"  # More verbose for API debugging
+    log_prompts: false  # Don't log full prompts (may contain sensitive data)
+    log_responses: false  # Don't log full responses
+    log_tokens: true  # Log token counts for cost tracking
+    
+  # MCDA
+  mcda:
+    level: "INFO"
+    
+  # Dashboard
+  app:
+    level: "INFO"
+
+# ==============================================================================
+# Performance Logging
+# ==============================================================================
+performance:
+  # Log execution time for key operations
+  enabled: true
+  threshold_ms: 1000  # Only log if operation takes > 1 second
+  
+  operations:
+    - data_loading
+    - ml_prediction
+    - llm_analysis
+    - mcda_ranking
+    - report_generation
+
+# ==============================================================================
+# Audit Logging
+# ==============================================================================
+audit:
+  enabled: true
+  path: "logs/audit_{time:YYYY-MM-DD}.log"
+  
+  # Events to audit
+  events:
+    - file_upload
+    - analysis_run
+    - export_generated
+    - settings_changed
