@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "PRISM Project Data Schema",
-  "description": "Schema for software project data used in risk analysis",
+  "description": "Schema for software project data used in risk analysis. Supports both PRISM native format and processed Apache JIRA data from https://www.kaggle.com/datasets/tedlozzo/apaches-jira-issues",
   "type": "object",
   "required": [
     "project_id",
@@ -185,6 +185,73 @@
       "type": "string",
       "description": "Client or sponsor feedback",
       "examples": ["Stakeholder satisfied with progress. Requested minor scope changes."]
+    },
+    "total_issues": {
+      "type": "integer",
+      "description": "Total number of issues/tickets (JIRA data)",
+      "minimum": 0,
+      "examples": [1500]
+    },
+    "open_issues": {
+      "type": "integer",
+      "description": "Number of open issues (JIRA data)",
+      "minimum": 0,
+      "examples": [250]
+    },
+    "closed_issues": {
+      "type": "integer",
+      "description": "Number of closed/resolved issues (JIRA data)",
+      "minimum": 0,
+      "examples": [1250]
+    },
+    "bug_count": {
+      "type": "integer",
+      "description": "Number of bug-type issues (JIRA data)",
+      "minimum": 0,
+      "examples": [800]
+    },
+    "blocker_count": {
+      "type": "integer",
+      "description": "Number of blocker-priority issues (JIRA data)",
+      "minimum": 0,
+      "examples": [15]
+    },
+    "blocker_ratio": {
+      "type": "number",
+      "description": "Ratio of blocker issues to total issues (JIRA data)",
+      "minimum": 0,
+      "maximum": 1,
+      "examples": [0.01]
+    },
+    "reopen_count": {
+      "type": "integer",
+      "description": "Number of times issues were reopened (JIRA data)",
+      "minimum": 0,
+      "examples": [45]
+    },
+    "reopen_rate": {
+      "type": "number",
+      "description": "Rate of issue reopens relative to closed issues (JIRA data)",
+      "minimum": 0,
+      "examples": [0.036]
+    },
+    "avg_resolution_days": {
+      "type": "number",
+      "description": "Average days to resolve an issue (JIRA data)",
+      "minimum": 0,
+      "examples": [14.5]
+    },
+    "median_resolution_days": {
+      "type": "number",
+      "description": "Median days to resolve an issue (JIRA data)",
+      "minimum": 0,
+      "examples": [7.0]
+    },
+    "project_duration_days": {
+      "type": "integer",
+      "description": "Total project duration in days (JIRA data)",
+      "minimum": 1,
+      "examples": [1825]
     }
   },
   "additionalProperties": true

@@ -1,9 +1,21 @@
 """
 Explainability Module
+=====================
 
-Model interpretation and explanation generation.
+This module provides model interpretation and explanation functionality.
+
+Classes:
+    SHAPExplainer: Generate SHAP-based explanations for ML predictions.
+
+Example:
+    >>> from src.explainability import SHAPExplainer
+    >>> explainer = SHAPExplainer(model, feature_names)
+    >>> explainer.fit(X_train)
+    >>> importance = explainer.get_feature_importance()
 """
 
-from .shap_explainer import SHAPExplainer
+from src.explainability.shap_explainer import SHAPExplainer
 
-__all__ = ["SHAPExplainer"]
+__all__ = [
+    "SHAPExplainer",
+]

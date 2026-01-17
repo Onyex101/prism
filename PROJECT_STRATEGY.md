@@ -1092,7 +1092,45 @@ Total:        200 projects
 
 ### Sample Datasets and Sources
 
-#### Public Datasets for Software Projects
+#### Primary Dataset: Apache JIRA Issues (Kaggle)
+
+**Selected Dataset for PRISM Development:**
+
+| Attribute | Value |
+|-----------|-------|
+| **Source** | [Apache JIRA Issues - Kaggle](https://www.kaggle.com/datasets/tedlozzo/apaches-jira-issues) |
+| **Total Issues** | 18.5 million |
+| **Total Comments** | 62.4 million (critical for LLM) |
+| **Changelog Entries** | 40.5 million |
+| **Projects** | 640 Apache Foundation projects |
+| **Top Projects** | Spark (50K), Flink (37K), HBase (29K), Hive (29K), Kafka (17K) |
+| **Date Range** | 2000 - Present |
+| **Size** | ~8 GB (raw CSV files) |
+
+**Why This Dataset?**
+- ✅ **Rich text data** for LLM sentiment/risk extraction (62M developer comments)
+- ✅ **Real software engineering** context from Apache Foundation
+- ✅ **Issue tracking** with priorities, statuses, resolutions, blockers
+- ✅ **Change history** for deriving velocity and churn metrics
+- ✅ **Large scale** for robust ML training (18.5M issues)
+- ✅ **Open source** and freely available on Kaggle
+- ✅ **Well-structured** CSV format for easy processing
+
+**Dataset Files:**
+- `issues.csv` - Core issue data (status, priority, dates, descriptions)
+- `comments.csv` - Developer comments (LLM input)
+- `changelog.csv` - Issue history (status changes, reassignments)
+- `issuelinks.csv` - Issue dependencies and relationships
+
+**Preprocessing Script:** `scripts/preprocess_jira_data.py`
+- Aggregates issue-level data to project-level metrics
+- Derives risk labels from issue outcomes
+- Joins comments for LLM text analysis
+- Outputs PRISM-compatible CSV format
+
+---
+
+#### Alternative/Supplementary Datasets
 
 **1. NASA Software Defect Datasets (MDP)**
 - **Source:** [NASA Metrics Data Program](https://github.com/klainfo/NASADefectDataset)
@@ -1108,12 +1146,12 @@ Total:        200 projects
 - **Cost:** ~$500 (academic discount available)
 - **Usage:** Gold standard for software project benchmarks
 
-**3. Apache Jira Public Projects**
-- **Source:** [Jira Public Issue Trackers](https://issues.apache.org/)
-- **Projects:** 100+ open-source projects
-- **Features:** Issues, comments, status updates
-- **Usage:** Text data for LLM training
-- **Extraction:** Jira REST API
+**3. SQuaD - Software Quality Dataset**
+- **Source:** [arxiv.org/abs/2511.11265](https://arxiv.org/abs/2511.11265)
+- **Projects:** 450 mature open-source projects (Apache, Mozilla, Linux)
+- **Features:** 700+ software quality metrics
+- **Releases:** 63,586 analyzed releases
+- **Usage:** Code quality metrics, technical debt analysis
 
 **4. GitHub Project Data**
 - **Source:** [GitHub Archive](https://www.gharchive.org/)
@@ -1121,12 +1159,6 @@ Total:        200 projects
 - **Features:** Commits, issues, PRs, discussions
 - **Usage:** Text comments and activity metrics
 - **Extraction:** GitHub GraphQL API
-
-**5. Kaggle Software Engineering Datasets**
-- **Source:** [Kaggle Datasets](https://www.kaggle.com/datasets)
-- **Notable:** "Software Project Success Prediction"
-- **Records:** Varies (50-500 projects per dataset)
-- **Usage:** Benchmarking and feature ideas
 
 #### Synthetic Data Strategy
 

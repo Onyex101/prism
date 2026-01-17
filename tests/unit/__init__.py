@@ -1,1 +1,6 @@
-"""Unit tests for individual modules."""
+"""
+Unit Tests
+==========
+
+Unit tests for individual PRISM modules and classes.
+"""

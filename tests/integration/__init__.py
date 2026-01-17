@@ -1,1 +1,6 @@
-"""Integration tests for combined workflows."""
+"""
+Integration Tests
+=================
+
+Integration tests for the PRISM system testing end-to-end workflows.
+"""

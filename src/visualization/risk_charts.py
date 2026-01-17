@@ -1,7 +1,16 @@
 """
 Risk Charts Module
+==================
 
-Generates visualizations for risk analysis results.
+This module generates visualizations for risk analysis results.
+
+It provides various chart types including pie charts, bar charts,
+gauges, radar charts, and histograms for visualizing risk data.
+
+Example:
+    >>> from src.visualization.risk_charts import RiskCharts
+    >>> fig = RiskCharts.risk_distribution_pie(rankings_df)
+    >>> fig.show()
 """
 
 from typing import Optional
@@ -9,14 +18,25 @@ from typing import Optional
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 
 class RiskCharts:
-    """Generate charts for risk visualization."""
+    """
+    Generate charts for risk visualization.
 
-    # Color scheme
-    COLORS = {
+    This class provides static methods for creating various chart types
+    using Plotly. All methods return Plotly Figure objects that can be
+    displayed or saved.
+
+    :cvar COLORS: Color scheme for risk levels and other elements.
+    :vartype COLORS: dict[str, str]
+
+    Example:
+        >>> pie_chart = RiskCharts.risk_distribution_pie(df)
+        >>> bar_chart = RiskCharts.risk_score_bar(df, top_n=10)
+    """
+
+    COLORS: dict[str, str] = {
         "high": "#FF4B4B",
         "medium": "#FFA500",
         "low": "#00CC66",
@@ -29,11 +49,13 @@ class RiskCharts:
         """
         Create pie chart showing risk level distribution.
 
-        Args:
-            df: DataFrame with 'risk_level' column
+        :param df: DataFrame with 'risk_level' column.
+        :type df: pd.DataFrame
+        :return: Plotly figure.
+        :rtype: go.Figure
 
-        Returns:
-            Plotly figure
+        Example:
+            >>> fig = RiskCharts.risk_distribution_pie(rankings_df)
         """
         counts = df["risk_level"].value_counts()
 
@@ -69,26 +91,23 @@ class RiskCharts:
         """
         Create horizontal bar chart of risk scores.
 
-        Args:
-            df: DataFrame with project data
-            top_n: Number of projects to show
-            name_col: Column for project names
-            score_col: Column for scores
+        :param df: DataFrame with project data.
+        :type df: pd.DataFrame
+        :param top_n: Number of projects to show.
+        :type top_n: int
+        :param name_col: Column for project names.
+        :type name_col: str
+        :param score_col: Column for scores.
+        :type score_col: str
+        :return: Plotly figure.
+        :rtype: go.Figure
 
-        Returns:
-            Plotly figure
+        Example:
+            >>> fig = RiskCharts.risk_score_bar(rankings_df, top_n=5)
         """
-        # Sort by score (ascending for risk - lower is riskier)
         plot_df = df.nsmallest(top_n, score_col)
 
-        colors = [
-            (
-                RiskCharts.COLORS["high"]
-                if s < 0.4
-                else RiskCharts.COLORS["medium"] if s < 0.7 else RiskCharts.COLORS["low"]
-            )
-            for s in plot_df[score_col]
-        ]
+        colors = [RiskCharts._get_risk_color(s) for s in plot_df[score_col]]
 
         fig = go.Figure(
             data=[
@@ -114,26 +133,40 @@ class RiskCharts:
         return fig
 
     @staticmethod
+    def _get_risk_color(score: float) -> str:
+        """
+        Get color based on risk score.
+
+        :param score: Risk score.
+        :type score: float
+        :return: Color hex code.
+        :rtype: str
+        """
+        if score < 0.4:
+            return RiskCharts.COLORS["high"]
+        if score < 0.7:
+            return RiskCharts.COLORS["medium"]
+        return RiskCharts.COLORS["low"]
+
+    @staticmethod
     def risk_gauge(score: float, title: str = "Risk Score") -> go.Figure:
         """
         Create a gauge chart for risk score.
 
-        Args:
-            score: Risk score (0-1)
-            title: Chart title
+        :param score: Risk score (0-1).
+        :type score: float
+        :param title: Chart title.
+        :type title: str
+        :return: Plotly figure.
+        :rtype: go.Figure
 
-        Returns:
-            Plotly figure
+        Example:
+            >>> fig = RiskCharts.risk_gauge(0.35, "Project Alpha Risk")
         """
         # Invert for gauge (higher = riskier)
         risk_value = 1 - score
 
-        if risk_value >= 0.6:
-            color = RiskCharts.COLORS["high"]
-        elif risk_value >= 0.3:
-            color = RiskCharts.COLORS["medium"]
-        else:
-            color = RiskCharts.COLORS["low"]
+        color = RiskCharts._get_gauge_color(risk_value)
 
         fig = go.Figure(
             go.Indicator(
@@ -163,6 +196,22 @@ class RiskCharts:
         return fig
 
     @staticmethod
+    def _get_gauge_color(risk_value: float) -> str:
+        """
+        Get gauge bar color based on risk value.
+
+        :param risk_value: Risk value (0-1).
+        :type risk_value: float
+        :return: Color hex code.
+        :rtype: str
+        """
+        if risk_value >= 0.6:
+            return RiskCharts.COLORS["high"]
+        if risk_value >= 0.3:
+            return RiskCharts.COLORS["medium"]
+        return RiskCharts.COLORS["low"]
+
+    @staticmethod
     def feature_importance_bar(
         importance_df: pd.DataFrame,
         top_n: int = 10,
@@ -170,12 +219,15 @@ class RiskCharts:
         """
         Create bar chart of feature importance.
 
-        Args:
-            importance_df: DataFrame with 'feature' and 'importance' columns
-            top_n: Number of features to show
+        :param importance_df: DataFrame with 'feature' and 'importance' columns.
+        :type importance_df: pd.DataFrame
+        :param top_n: Number of features to show.
+        :type top_n: int
+        :return: Plotly figure.
+        :rtype: go.Figure
 
-        Returns:
-            Plotly figure
+        Example:
+            >>> fig = RiskCharts.feature_importance_bar(importance_df, top_n=10)
         """
         plot_df = importance_df.head(top_n)
 
@@ -205,11 +257,13 @@ class RiskCharts:
         """
         Create histogram of sentiment scores.
 
-        Args:
-            df: DataFrame with 'sentiment_score' column
+        :param df: DataFrame with 'sentiment_score' column.
+        :type df: pd.DataFrame
+        :return: Plotly figure.
+        :rtype: go.Figure
 
-        Returns:
-            Plotly figure
+        Example:
+            >>> fig = RiskCharts.sentiment_distribution(llm_results_df)
         """
         fig = px.histogram(
             df,
@@ -230,15 +284,18 @@ class RiskCharts:
         return fig
 
     @staticmethod
-    def risk_category_radar(categories: dict) -> go.Figure:
+    def risk_category_radar(categories: dict[str, int]) -> go.Figure:
         """
         Create radar chart of risk categories.
 
-        Args:
-            categories: Dict of category -> count
+        :param categories: Dict of category -> count.
+        :type categories: dict[str, int]
+        :return: Plotly figure.
+        :rtype: go.Figure
 
-        Returns:
-            Plotly figure
+        Example:
+            >>> categories = {"technical": 5, "resource": 3, "schedule": 7}
+            >>> fig = RiskCharts.risk_category_radar(categories)
         """
         cats = list(categories.keys())
         values = list(categories.values())
@@ -273,12 +330,19 @@ class RiskCharts:
         """
         Create radar chart comparing multiple projects.
 
-        Args:
-            projects: List of project dicts with metrics
-            metrics: List of metric names to compare
+        :param projects: List of project dicts with metrics.
+        :type projects: list[dict]
+        :param metrics: List of metric names to compare.
+        :type metrics: list[str]
+        :return: Plotly figure.
+        :rtype: go.Figure
 
-        Returns:
-            Plotly figure
+        Example:
+            >>> projects = [
+            ...     {"project_name": "A", "spi": 0.8, "cpi": 0.9},
+            ...     {"project_name": "B", "spi": 1.1, "cpi": 0.7},
+            ... ]
+            >>> fig = RiskCharts.comparison_radar(projects, ["spi", "cpi"])
         """
         fig = go.Figure()
 
@@ -290,7 +354,7 @@ class RiskCharts:
         ]
 
         for i, project in enumerate(projects[:4]):
-            name = project.get("project_name", f"Project {i+1}")
+            name = project.get("project_name", f"Project {i + 1}")
             values = [project.get(m, 0) for m in metrics]
             values.append(values[0])  # Close the radar
 
