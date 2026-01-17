@@ -1,0 +1,30 @@
+# PRISM - Test & Development Dependencies
+# Run: pip-compile requirements-test.in -o requirements-test.txt
+
+# Include core dependencies
+-r requirements.in
+
+# Testing
+pytest
+pytest-cov
+pytest-mock
+pytest-asyncio
+
+# Code Formatting
+black
+isort
+
+# Linting
+flake8
+mypy
+
+# Type Stubs
+types-PyYAML
+types-requests
+
+# Pre-commit Hooks
+pre-commit
+
+# Jupyter Notebooks (for development)
+jupyter
+ipykernel

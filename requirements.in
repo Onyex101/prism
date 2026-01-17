@@ -1,0 +1,49 @@
+# PRISM - Core Dependencies
+# Run: pip-compile requirements.in -o requirements.txt
+
+# Data Processing
+pandas
+numpy
+scipy
+
+# Machine Learning
+scikit-learn
+xgboost
+imbalanced-learn
+joblib
+
+# Model Explainability
+shap
+
+# LLM Integration
+openai
+langchain
+langchain-openai
+
+# NLP
+nltk
+
+# MCDA
+pymcdm
+
+# Dashboard
+streamlit
+plotly
+
+# Visualization
+matplotlib
+seaborn
+
+# Configuration
+pyyaml
+python-dotenv
+python-decouple
+
+# Logging
+loguru
+
+# Data Validation
+pandera
+
+# HTTP Client (for API calls)
+httpx
