@@ -66,9 +66,14 @@ class DataPreprocessor:
             Options: "most_frequent" (default), "unknown".
         :type categorical_strategy: str
         :param scaling_method: Scaling method for numerical features.
-            Options: "standard" (default).
+            Options: "standard" (default). Other methods (minmax, robust) not yet implemented.
         :type scaling_method: str
+        :raises ValueError: If scaling_method is not supported.
         """
+        if scaling_method not in ("standard",):
+            raise ValueError(
+                f"Unsupported scaling_method: {scaling_method}. Use 'standard'."
+            )
         self.numerical_strategy = numerical_strategy
         self.categorical_strategy = categorical_strategy
         self.scaling_method = scaling_method

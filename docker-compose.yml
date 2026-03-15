@@ -1,0 +1,20 @@
+# PRISM Docker Compose
+# Usage: docker-compose up -d
+# Add OPENAI_API_KEY to .env for LLM features
+
+services:
+  prism:
+    build: .
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DATA_RAW_DIR=/app/data/raw
+      - MODELS_DIR=/app/models
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+    restart: unless-stopped

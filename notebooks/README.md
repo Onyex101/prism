@@ -7,10 +7,10 @@ Jupyter notebooks for exploratory analysis and model development.
 1. **01_data_exploration.ipynb** - Exploratory Data Analysis
 2. **02_feature_engineering.ipynb** - Feature creation and analysis
 3. **03_ml_modeling.ipynb** - ML model training and evaluation
-4. **04_llm_experiments.ipynb** - LLM prompt testing (to be created)
-5. **05_mcda_analysis.ipynb** - MCDA validation (to be created)
-6. **06_hybrid_evaluation.ipynb** - Combined approach assessment (to be created)
-7. **07_results_visualization.ipynb** - Final results and charts (to be created)
+4. **04_llm_experiments.ipynb** - LLM prompt testing
+5. **05_mcda_analysis.ipynb** - MCDA validation
+6. **06_hybrid_evaluation.ipynb** - Combined approach assessment
+7. **07_results_visualization.ipynb** - Final results and charts
 
 ## Running Notebooks
 

@@ -3,7 +3,7 @@
 **A Hybrid AI System Integrating Machine Learning and Large Language Models for Software Project Risk Analysis**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-88%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-109%20passed-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Status: Implementation Complete](https://img.shields.io/badge/Status-Implementation%20Complete-success.svg)]()
 
@@ -152,6 +152,7 @@ prism/
 │   │
 │   ├── models/                   # ML and LLM models
 │   │   ├── ml/                   # Machine learning
+│   │   │   ├── base_model.py     # Base model interface
 │   │   │   ├── trainer.py        # Model training
 │   │   │   ├── predictor.py      # Predictions
 │   │   │   └── evaluator.py      # Model evaluation
@@ -180,7 +181,9 @@ prism/
 │   ├── settings.py               # Application settings
 │   ├── mcda_config.yaml          # MCDA weights
 │   ├── model_config.yaml         # ML model parameters
-│   └── llm_config.yaml           # LLM settings
+│   ├── llm_config.yaml           # LLM settings
+│   ├── logging_config.yaml       # Logging configuration
+│   └── ui_config.yaml            # UI settings
 │
 ├── data/                         # Data directory
 │   ├── raw/                      # Raw project data files
@@ -193,7 +196,8 @@ prism/
 │
 ├── scripts/                      # Utility scripts
 │   ├── preprocess_jira_data.py   # Jira data preprocessing
-│   └── train_models.py           # Model training script
+│   ├── train_models.py           # Model training script
+│   └── evaluate_system.py        # End-to-end evaluation
 │
 ├── docs/                         # Documentation
 │   └── academic/                 # Academic chapters
@@ -219,7 +223,7 @@ prism/
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourusername/prism.git
+git clone https://github.com/Onyex101/prism.git
 cd prism
 
 # 2. Create virtual environment

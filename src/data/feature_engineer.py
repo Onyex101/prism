@@ -436,6 +436,10 @@ class FeatureEngineer:
             df["is_behind_schedule"] = (df["schedule_gap"] > 10).astype(int)
             self.feature_names.append("is_behind_schedule")
 
+        if "complexity_score" in df.columns:
+            df["is_high_complexity"] = (df["complexity_score"] > 7).astype(int)
+            self.feature_names.append("is_high_complexity")
+
         return df
 
     def get_feature_names(self) -> list[str]:

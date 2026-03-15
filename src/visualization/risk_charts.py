@@ -57,6 +57,8 @@ class RiskCharts:
         Example:
             >>> fig = RiskCharts.risk_distribution_pie(rankings_df)
         """
+        if "risk_level" not in df.columns:
+            raise ValueError("DataFrame must contain 'risk_level' column for risk_distribution_pie")
         counts = df["risk_level"].value_counts()
 
         colors = [RiskCharts.COLORS.get(level.lower(), "#808080") for level in counts.index]
@@ -105,6 +107,10 @@ class RiskCharts:
         Example:
             >>> fig = RiskCharts.risk_score_bar(rankings_df, top_n=5)
         """
+        if name_col not in df.columns:
+            raise ValueError(f"DataFrame must contain '{name_col}' column for risk_score_bar")
+        if score_col not in df.columns:
+            raise ValueError(f"DataFrame must contain '{score_col}' column for risk_score_bar")
         plot_df = df.nsmallest(top_n, score_col)
 
         colors = [RiskCharts._get_risk_color(s) for s in plot_df[score_col]]
@@ -229,6 +235,10 @@ class RiskCharts:
         Example:
             >>> fig = RiskCharts.feature_importance_bar(importance_df, top_n=10)
         """
+        if "feature" not in importance_df.columns or "importance" not in importance_df.columns:
+            raise ValueError(
+                "importance_df must contain 'feature' and 'importance' columns for feature_importance_bar"
+            )
         plot_df = importance_df.head(top_n)
 
         fig = go.Figure(
@@ -265,6 +275,8 @@ class RiskCharts:
         Example:
             >>> fig = RiskCharts.sentiment_distribution(llm_results_df)
         """
+        if "sentiment_score" not in df.columns:
+            raise ValueError("DataFrame must contain 'sentiment_score' column for sentiment_distribution")
         fig = px.histogram(
             df,
             x="sentiment_score",

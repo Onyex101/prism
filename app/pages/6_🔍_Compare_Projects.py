@@ -73,6 +73,16 @@ with col2:
 with col3:
     st.markdown(f"#### {project_b}")
 
+def _fmt_val(val, unit):
+    if pd.isna(val):
+        return "N/A"
+    if unit == "$":
+        return f"${val:,.0f}"
+    if unit == "%":
+        return f"{val:.1f}%"
+    return f"{val:.2f}" if isinstance(val, (int, float)) else str(val)
+
+
 for metric, label, unit in metrics_to_compare:
     if metric in df.columns:
         col1, col2, col3 = st.columns([2, 1, 2])
@@ -81,31 +91,34 @@ for metric, label, unit in metrics_to_compare:
         val_b = row_b[metric]
 
         with col1:
-            if unit == "$":
-                st.write(f"${val_a:,.0f}")
-            elif unit == "%":
-                st.write(f"{val_a:.1f}%")
-            else:
-                st.write(f"{val_a:.2f}" if isinstance(val_a, float) else val_a)
+            st.write(_fmt_val(val_a, unit))
 
         with col2:
             st.write(f"**{label}**")
 
         with col3:
-            if unit == "$":
-                st.write(f"${val_b:,.0f}")
-            elif unit == "%":
-                st.write(f"{val_b:.1f}%")
-            else:
-                st.write(f"{val_b:.2f}" if isinstance(val_b, float) else val_b)
+            st.write(_fmt_val(val_b, unit))
 
 # Radar chart comparison
 st.markdown("---")
 st.markdown("### Visual Comparison")
 
-# Prepare radar data
+# Prepare radar data - only metrics with valid (non-NaN) values for both projects
 radar_metrics = ["completion_rate", "budget_utilization", "team_size", "risk_score", "mcda_score"]
-available_metrics = [m for m in radar_metrics if m in df.columns]
+available_metrics = [
+    m
+    for m in radar_metrics
+    if m in df.columns
+    and pd.notna(row_a.get(m))
+    and pd.notna(row_b.get(m))
+]
+# Further filter: col min/max must be finite for normalization
+available_metrics = [
+    m
+    for m in available_metrics
+    if pd.notna(df[m].min())
+    and pd.notna(df[m].max())
+]
 
 if len(available_metrics) >= 3:
     # Normalize values for radar
@@ -170,8 +183,10 @@ if "status_comments" in df.columns:
 
     with col1:
         st.markdown(f"**{project_a}**")
-        st.text_area("", row_a["status_comments"], height=200, disabled=True, key="comments_a")
+        comments_a = "" if pd.isna(row_a["status_comments"]) else str(row_a["status_comments"])
+        st.text_area("", comments_a, height=200, disabled=True, key="comments_a")
 
     with col2:
         st.markdown(f"**{project_b}**")
-        st.text_area("", row_b["status_comments"], height=200, disabled=True, key="comments_b")
+        comments_b = "" if pd.isna(row_b["status_comments"]) else str(row_b["status_comments"])
+        st.text_area("", comments_b, height=200, disabled=True, key="comments_b")

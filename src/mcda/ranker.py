@@ -401,29 +401,29 @@ class ProjectRanker:
         """
         original_weight = self.criteria[criterion]["weight"]
 
-        # Test with increased weight
-        self.criteria[criterion]["weight"] = min(1.0, original_weight + weight_variation)
-        self.rank(projects_df)
-        increased_rankings = self.rankings["rank"].values
+        try:
+            # Test with increased weight
+            self.criteria[criterion]["weight"] = min(1.0, original_weight + weight_variation)
+            self.rank(projects_df)
+            increased_rankings = self.rankings["rank"].values
 
-        # Test with decreased weight
-        self.criteria[criterion]["weight"] = max(0.0, original_weight - weight_variation)
-        self.rank(projects_df)
-        decreased_rankings = self.rankings["rank"].values
+            # Test with decreased weight
+            self.criteria[criterion]["weight"] = max(0.0, original_weight - weight_variation)
+            self.rank(projects_df)
+            decreased_rankings = self.rankings["rank"].values
 
-        # Calculate average rank change
-        avg_change = 0.0
-        if original_rankings is not None:
-            original_ranks = original_rankings["rank"].values
-            avg_change = (
-                np.mean(
-                    np.abs(increased_rankings - original_ranks)
-                    + np.abs(decreased_rankings - original_ranks)
+            # Calculate average rank change
+            avg_change = 0.0
+            if original_rankings is not None:
+                original_ranks = original_rankings["rank"].values
+                avg_change = (
+                    np.mean(
+                        np.abs(increased_rankings - original_ranks)
+                        + np.abs(decreased_rankings - original_ranks)
+                    )
+                    / 2
                 )
-                / 2
-            )
 
-        # Restore original weight
-        self.criteria[criterion]["weight"] = original_weight
-
-        return avg_change
+            return avg_change
+        finally:
+            self.criteria[criterion]["weight"] = original_weight

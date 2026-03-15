@@ -51,35 +51,6 @@ class DataLoader:
 
     SUPPORTED_FORMATS: list[str] = [".csv", ".json", ".xlsx", ".xls"]
 
-    JIRA_TO_PRISM_MAPPING: dict[str, str] = {
-        "project_id": "project_id",
-        "project_name": "project_name",
-        "project_type": "project_type",
-        "start_date": "start_date",
-        "planned_end_date": "planned_end_date",
-        "actual_end_date": "actual_end_date",
-        "budget": "budget",
-        "spent": "spent",
-        "planned_hours": "planned_hours",
-        "actual_hours": "actual_hours",
-        "team_size": "team_size",
-        "completion_rate": "completion_rate",
-        "status": "status",
-        "priority": "priority",
-        "methodology": "methodology",
-        "department": "department",
-        "client_type": "client_type",
-        "complexity_score": "complexity_score",
-        "dependencies": "dependencies",
-        "velocity": "velocity",
-        "defect_rate": "defect_rate",
-        "team_turnover": "team_turnover",
-        "risk_level": "risk_level",
-        "status_comments": "status_comments",
-        "project_description": "project_description",
-        "team_feedback": "team_feedback",
-    }
-
     def __init__(self) -> None:
         """Initialize the DataLoader with default state."""
         self.last_loaded_path: Optional[Path] = None
@@ -420,15 +391,19 @@ class DataLoader:
         suffix = Path(file_name).suffix.lower()
 
         if suffix == ".csv":
-            return pd.read_csv(StringIO(file_bytes.decode("utf-8")), **kwargs)
-        if suffix == ".json":
+            df = pd.read_csv(StringIO(file_bytes.decode("utf-8")), **kwargs)
+        elif suffix == ".json":
             data = json.loads(file_bytes.decode("utf-8"))
             if isinstance(data, list):
-                return pd.DataFrame(data)
-            if isinstance(data, dict) and "projects" in data:
-                return pd.DataFrame(data["projects"])
-            return pd.DataFrame([data])
-        if suffix in [".xlsx", ".xls"]:
-            return pd.read_excel(BytesIO(file_bytes), **kwargs)
+                df = pd.DataFrame(data)
+            elif isinstance(data, dict) and "projects" in data:
+                df = pd.DataFrame(data["projects"])
+            else:
+                df = pd.DataFrame([data])
+        elif suffix in [".xlsx", ".xls"]:
+            df = pd.read_excel(BytesIO(file_bytes), **kwargs)
+        else:
+            raise ValueError(f"Unsupported format: {suffix}")
 
-        raise ValueError(f"Unsupported format: {suffix}")
+        df = self._detect_and_normalize_format(df)
+        return df

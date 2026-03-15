@@ -152,6 +152,9 @@ class SHAPExplainer:
         # Handle multi-class output
         if isinstance(self.shap_values, list):
             self.shap_values = self.shap_values[-1]
+        elif isinstance(self.shap_values, np.ndarray) and self.shap_values.ndim == 3:
+            # Binary/multi-class: shape (n_samples, n_features, n_classes)
+            self.shap_values = self.shap_values[:, :, -1]
 
         logger.debug(f"Generated SHAP values for {len(X)} samples")
 

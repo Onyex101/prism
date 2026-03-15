@@ -128,9 +128,12 @@ Always be constructive and suggest actionable steps when discussing problems."""
 
         if rankings_df is not None:
             self.context_data["rankings"] = rankings_df.to_dict(orient="records")
-            self.context_data["high_risk_count"] = len(
-                rankings_df[rankings_df["risk_level"] == "High"]
-            )
+            if "risk_level" in rankings_df.columns:
+                self.context_data["high_risk_count"] = len(
+                    rankings_df[rankings_df["risk_level"] == "High"]
+                )
+            else:
+                self.context_data["high_risk_count"] = 0
 
         if llm_insights is not None:
             self.context_data["insights"] = llm_insights
@@ -202,7 +205,7 @@ Always be constructive and suggest actionable steps when discussing problems."""
             model=self.model,
             messages=messages,
             temperature=0.7,
-            max_tokens=1000,
+            max_tokens=4096,
         )
 
         return response.choices[0].message.content
@@ -236,17 +239,27 @@ Always be constructive and suggest actionable steps when discussing problems."""
         """
         Format top risk projects for context.
 
+        Returns the 5 riskiest projects (lowest MCDA score = highest risk).
+
         :return: Formatted string.
         :rtype: str
         """
-        top_5 = self.context_data["rankings"][:5]
+        rankings = self.context_data["rankings"]
+        # Sort by mcda_score ascending: lowest score = riskiest (MCDA: higher = better)
+        # Use a large default for missing scores so they sort to the end
+        sorted_rankings = sorted(
+            rankings,
+            key=lambda p: (p.get("mcda_score") if p.get("mcda_score") is not None else 999.0),
+        )
+        top_5 = sorted_rankings[:5]
         lines = ["\nTop 5 Risk Projects:"]
 
         for proj in top_5:
             name = proj.get("project_name", proj.get("project_id", "Unknown"))
-            score = proj.get("mcda_score", 0)
+            score = proj.get("mcda_score")
             level = proj.get("risk_level", "Unknown")
-            lines.append(f"  - {name}: Score {score:.2f} ({level})")
+            score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "N/A"
+            lines.append(f"  - {name}: Score {score_str} ({level})")
 
         return "\n".join(lines)
 
@@ -286,10 +299,12 @@ Always be constructive and suggest actionable steps when discussing problems."""
         :return: Formatted string.
         :rtype: str
         """
+        mcda_score = proj.get("mcda_score")
+        mcda_str = f"{mcda_score:.2f}" if isinstance(mcda_score, (int, float)) else "N/A"
         return "\n".join(
             [
                 f"**{name}**",
-                f"- MCDA Score: {proj.get('mcda_score', 'N/A'):.2f}",
+                f"- MCDA Score: {mcda_str}",
                 f"- Risk Level: {proj.get('risk_level', 'N/A')}",
                 f"- Rank: {proj.get('rank', 'N/A')}",
             ]

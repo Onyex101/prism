@@ -29,16 +29,15 @@ uploaded_file = st.file_uploader(
 col1, col2 = st.columns(2)
 
 with col1:
-    if st.button("📥 Download CSV Template"):
-        template = """project_id,project_name,start_date,planned_end_date,budget,spent,planned_hours,actual_hours,team_size,completion_rate,status,priority,status_comments
+    template = """project_id,project_name,start_date,planned_end_date,budget,spent,planned_hours,actual_hours,team_size,completion_rate,status,priority,status_comments
 PROJ-001,Example Project,2024-01-01,2024-06-30,100000,50000,1000,600,5,55.0,Active,High,"On track with minor issues. Team working well together."
 """
-        st.download_button(
-            label="Download",
-            data=template,
-            file_name="prism_template.csv",
-            mime="text/csv",
-        )
+    st.download_button(
+        label="📥 Download CSV Template",
+        data=template,
+        file_name="prism_template.csv",
+        mime="text/csv",
+    )
 
 with col2:
     if st.button("📊 Load Sample Data"):
@@ -119,7 +118,7 @@ if uploaded_file is not None:
         st.markdown("---")
         if st.button("✅ Use This Data", type="primary"):
             st.session_state["projects_df"] = df
-            st.success("Data saved! Redirecting to dashboard...")
+            st.success("Data loaded successfully! Navigate to Dashboard to explore.")
             st.balloons()
 
     except Exception as e:

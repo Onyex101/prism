@@ -94,7 +94,3 @@ train:
 # Run full evaluation
 evaluate:
 	python scripts/evaluate_system.py
-
-# Export results
-export:
-	python scripts/export_results.py

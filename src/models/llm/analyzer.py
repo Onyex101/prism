@@ -19,11 +19,12 @@ from typing import Any, Optional
 from loguru import logger
 
 try:
-    from openai import OpenAI
+    from openai import OpenAI, OpenAIError
 
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
+    OpenAIError = type("OpenAIError", (Exception,), {})  # noqa: invalid-name
 
 
 class LLMAnalyzer:
@@ -135,7 +136,7 @@ Always provide structured output in the exact JSON format requested."""
 
         try:
             return self._call_api(project_name, user_prompt)
-        except Exception as e:
+        except (OpenAIError, json.JSONDecodeError) as e:
             logger.error(f"Error analyzing {project_name}: {e}")
             return self._empty_result(f"Analysis error: {str(e)}")
 

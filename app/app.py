@@ -48,7 +48,7 @@ def main():
     """Main application function."""
     # Sidebar
     with st.sidebar:
-        st.image("https://via.placeholder.com/150x50?text=PRISM", width=150)
+        st.markdown("### 🔮 PRISM")
         st.markdown("---")
         st.markdown("### Navigation")
         st.markdown(
@@ -146,8 +146,7 @@ def main():
     st.markdown(
         """
         <div style='text-align: center; color: #888; font-size: 0.9rem;'>
-        PRISM v1.0 | Built with Streamlit | 
-        <a href='https://github.com/yourorg/prism'>GitHub</a>
+        PRISM v1.0 | Predictive Risk Intelligence for Software Management | Built with Streamlit
         </div>
         """,
         unsafe_allow_html=True,

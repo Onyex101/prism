@@ -83,6 +83,10 @@ def main():
 
     logger.info(f"Train size: {len(X_train)}, Test size: {len(X_test)}")
 
+    if MLTrainer is None:
+        logger.error("MLTrainer unavailable. Install xgboost: pip install xgboost")
+        sys.exit(1)
+
     # Compare models
     logger.info("Comparing models...")
     trainer = MLTrainer()
