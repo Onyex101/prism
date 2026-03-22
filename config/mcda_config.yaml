@@ -1,5 +1,6 @@
 # PRISM MCDA Configuration
 # Multi-Criteria Decision Analysis settings
+# Aligned with notebooks (05_mcda_analysis) and ProjectRanker.DEFAULT_CRITERIA
 
 # ==============================================================================
 # Algorithm Selection
@@ -19,7 +20,7 @@ criteria:
 
   ml_risk_score:
     weight: 0.40
-    type: cost  # Lower risk score is better
+    type: cost  # Higher ML risk score = worse
     source: ml
     description: "Machine learning model risk prediction"
     range: [0.0, 1.0]
@@ -40,65 +41,58 @@ criteria:
     range: [0.0, 2.0]
     cap: 2.0  # Cap extreme values
 
-  cost_performance_index:
+  blocker_ratio:
     weight: 0.10
-    type: benefit  # Higher CPI is better
+    type: cost  # Higher blocker ratio = worse
     source: metric
-    description: "Cost Performance Index (budget/spent)"
-    range: [0.0, 2.0]
-    cap: 2.0
-
-  team_stability:
-    weight: 0.10
-    type: benefit  # Higher stability is better
-    source: derived
-    description: "Team stability (1 - turnover rate)"
+    description: "Share of issues that are blockers"
     range: [0.0, 1.0]
-    calculation: "1 - team_turnover"
+
+  defect_rate:
+    weight: 0.10
+    type: cost  # Higher defect rate = worse
+    source: metric
+    description: "Defect density / defect-related share"
+    range: [0.0, 1.0]
 
 # ==============================================================================
 # Alternative Weight Profiles
 # ==============================================================================
 weight_profiles:
-  # Default balanced profile
   balanced:
     ml_risk_score: 0.40
     llm_sentiment_score: 0.25
     schedule_performance_index: 0.15
-    cost_performance_index: 0.10
-    team_stability: 0.10
+    blocker_ratio: 0.10
+    defect_rate: 0.10
 
-  # ML-heavy profile (trust numbers more)
   quantitative:
     ml_risk_score: 0.50
     llm_sentiment_score: 0.15
     schedule_performance_index: 0.15
-    cost_performance_index: 0.15
-    team_stability: 0.05
+    blocker_ratio: 0.10
+    defect_rate: 0.10
 
-  # LLM-heavy profile (trust text analysis more)
   qualitative:
     ml_risk_score: 0.30
     llm_sentiment_score: 0.40
     schedule_performance_index: 0.10
-    cost_performance_index: 0.10
-    team_stability: 0.10
+    blocker_ratio: 0.10
+    defect_rate: 0.10
 
-  # Schedule-focused profile
   schedule_focused:
     ml_risk_score: 0.25
     llm_sentiment_score: 0.20
     schedule_performance_index: 0.35
-    cost_performance_index: 0.10
-    team_stability: 0.10
+    blocker_ratio: 0.10
+    defect_rate: 0.10
 
-  # Cost-focused profile
-  cost_focused:
+  quality_focused:
     ml_risk_score: 0.25
-    llm_sentiment_score: 0.15
-    schedule_performance_index: 0.15
-    cost_performance_index: 0.35
-    team_stability: 0.10
+    llm_sentiment_score: 0.20
+    schedule_performance_index: 0.10
+    blocker_ratio: 0.20
+    defect_rate: 0.25
 
 # ==============================================================================
 # TOPSIS Settings

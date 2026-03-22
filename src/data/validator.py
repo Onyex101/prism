@@ -122,8 +122,6 @@ class DataValidator:
         "project_name",
         "start_date",
         "planned_end_date",
-        "budget",
-        "spent",
         "planned_hours",
         "actual_hours",
         "team_size",
@@ -146,9 +144,14 @@ class DataValidator:
         """
         Initialize the validator.
 
-        :param rules_path: Path to validation rules YAML file.
+        :param rules_path: Path to validation rules YAML file. If ``None``,
+            uses ``data/schemas/validation_rules.yaml`` under the project root
+            (next to ``src/``) when that file exists.
         :type rules_path: Optional[Path]
         """
+        if rules_path is None:
+            default_rules = Path(__file__).resolve().parents[2] / "data" / "schemas" / "validation_rules.yaml"
+            rules_path = default_rules if default_rules.exists() else None
         self.rules_path = rules_path
         self.rules = self._load_rules() if rules_path else {}
 
@@ -163,6 +166,16 @@ class DataValidator:
             with open(self.rules_path, "r") as f:
                 return yaml.safe_load(f) or {}
         return {}
+
+    def _get_required_columns(self) -> list[str]:
+        """
+        Columns that must be present: from YAML ``required_fields`` when loaded,
+        else :attr:`REQUIRED_COLUMNS`.
+        """
+        rf = self.rules.get("required_fields")
+        if isinstance(rf, list) and rf:
+            return [str(c) for c in rf]
+        return list(self.REQUIRED_COLUMNS)
 
     def validate(self, df: pd.DataFrame) -> ValidationResult:
         """
@@ -217,7 +230,8 @@ class DataValidator:
         :return: List of error dictionaries.
         :rtype: list[dict[str, Any]]
         """
-        missing_cols = [col for col in self.REQUIRED_COLUMNS if col not in df.columns]
+        required = self._get_required_columns()
+        missing_cols = [col for col in required if col not in df.columns]
         if missing_cols:
             return [
                 {
@@ -268,6 +282,7 @@ class DataValidator:
         errors.extend(self._validate_numeric_fields(df))
         errors.extend(self._validate_completion_rate(df))
         warnings.extend(self._validate_status_values(df))
+        warnings.extend(self._validate_priority_values(df))
         warnings.extend(self._validate_text_lengths(df))
 
         return errors, warnings
@@ -282,7 +297,7 @@ class DataValidator:
         :rtype: list[dict[str, Any]]
         """
         errors: list[dict[str, Any]] = []
-        numeric_fields = ["budget", "spent", "planned_hours", "actual_hours", "team_size"]
+        numeric_fields = ["planned_hours", "actual_hours", "team_size"]
 
         for field_name in numeric_fields:
             if field_name in df.columns:
@@ -343,6 +358,32 @@ class DataValidator:
                 }
             ]
         return []
+
+    def _validate_priority_values(self, df: pd.DataFrame) -> list[dict[str, Any]]:
+        """
+        Warn when ``priority`` is present but not in the allowed set.
+
+        Priority is optional; when missing, downstream code may default it.
+        """
+        if "priority" not in df.columns:
+            return []
+
+        series = df["priority"].dropna()
+        if series.empty:
+            return []
+
+        invalid = series[~series.astype(str).str.strip().isin(self.VALID_PRIORITIES)]
+        if invalid.empty:
+            return []
+
+        bad = invalid.unique().tolist()
+        return [
+            {
+                "type": "invalid_priority",
+                "message": f"Unknown priority values: {bad}",
+                "values": bad,
+            }
+        ]
 
     def _validate_text_lengths(self, df: pd.DataFrame) -> list[dict[str, Any]]:
         """
@@ -472,9 +513,9 @@ class DataValidator:
             "overall_completeness_pct": round(overall_completeness, 1),
             "column_completeness": completeness,
             "required_columns_present": len(
-                [c for c in self.REQUIRED_COLUMNS if c in df.columns]
+                [c for c in self._get_required_columns() if c in df.columns]
             ),
-            "required_columns_total": len(self.REQUIRED_COLUMNS),
+            "required_columns_total": len(self._get_required_columns()),
         }
 
     def _calculate_completeness(

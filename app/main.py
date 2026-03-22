@@ -4,44 +4,81 @@ PRISM - Predictive Risk Intelligence for Software Management
 Main Streamlit application entry point.
 """
 
+import sys
+from pathlib import Path
+
+# Streamlit puts the script directory on sys.path first; ensure repo root is present
+# so ``import app`` resolves before any ``from app.bootstrap`` (see app/bootstrap.py).
+_p = Path(__file__).resolve().parent
+_repo_root = _p.parent.parent if _p.name == "pages" else _p.parent
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
 import streamlit as st
 
-# Page configuration - must be first Streamlit command
-st.set_page_config(
-    page_title="PRISM - Project Risk Intelligence",
-    page_icon="🔮",
-    layout="wide",
-    initial_sidebar_state="expanded",
+from app.bootstrap import init_page
+from app.streamlit_theme import (
+    ACCENT_BLUE,
+    RISK_COLOR_HIGH,
+    RISK_COLOR_LOW,
+    RISK_COLOR_MEDIUM,
 )
 
-# Custom CSS
+# Wide layout + sidebar styles (same as every multipage script; must be first st.* calls)
+init_page()
+
+# Custom CSS (colors from app.streamlit_theme for consistency with charts)
 st.markdown(
-    """
+    f"""
 <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1E88E5;
+    .main-header {{
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
         margin-bottom: 0.5rem;
-    }
-    .sub-header {
+        line-height: 1.1;
+    }}
+    .prism-logo {{
+        font-size: 4.25rem;
+        line-height: 1;
+    }}
+    .main-header-text {{
+        font-size: 2.75rem;
+        font-weight: bold;
+        color: {ACCENT_BLUE};
+    }}
+    .sub-header {{
         font-size: 1.2rem;
         color: #666;
         margin-bottom: 2rem;
-    }
-    .metric-card {
+    }}
+    .metric-card {{
         background-color: #f8f9fa;
         border-radius: 10px;
         padding: 1rem;
         text-align: center;
-    }
-    .risk-high { color: #FF4B4B; }
-    .risk-medium { color: #FFA500; }
-    .risk-low { color: #00CC66; }
+    }}
+    .risk-high {{ color: {RISK_COLOR_HIGH}; }}
+    .risk-medium {{ color: {RISK_COLOR_MEDIUM}; }}
+    .risk-low {{ color: {RISK_COLOR_LOW}; }}
 </style>
 """,
     unsafe_allow_html=True,
 )
+
+
+def _load_demo_data():
+    """Load processed JIRA CSV if present; otherwise generate synthetic PRISM-format data."""
+    from src.data.generator import SyntheticDataGenerator
+    from src.data.loader import DataLoader
+
+    loader = DataLoader()
+    try:
+        return loader.load_jira_data(), "jira"
+    except FileNotFoundError:
+        gen = SyntheticDataGenerator(random_seed=42)
+        df = gen.generate(n_projects=80, include_text=True)
+        return df, "synthetic"
 
 
 def main():
@@ -74,7 +111,11 @@ def main():
             st.info("No data loaded yet")
 
     # Main content
-    st.markdown('<p class="main-header">🔮 PRISM</p>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="main-header"><span class="prism-logo" aria-hidden="true">🔮</span>'
+        '<span class="main-header-text">PRISM</span></p>',
+        unsafe_allow_html=True,
+    )
     st.markdown(
         '<p class="sub-header">Predictive Risk Intelligence for Software Management</p>',
         unsafe_allow_html=True,
@@ -112,34 +153,38 @@ def main():
 
         """
         )
-        if st.button("📁 Upload Data", use_container_width=True):
+        if st.button("📁 Upload Data", width="stretch"):
             st.switch_page("pages/2_📁_Upload_Data.py")
 
-        if st.button("📊 View Dashboard", use_container_width=True):
+        if st.button("📊 View Dashboard", width="stretch"):
             st.switch_page("pages/1_📊_Dashboard.py")
 
-        if st.button("💭 Ask PRISM", use_container_width=True):
+        if st.button("💭 Ask PRISM", width="stretch"):
             st.switch_page("pages/7_💭_Chat_Assistant.py")
 
     # Sample data section
     st.markdown("---")
-    st.markdown("### Try with Sample Data")
+    st.markdown("### Try with demo data")
+    st.caption(
+        "Loads `data/processed/jira_projects.csv` when available (notebook pipeline); "
+        "otherwise generates synthetic PRISM-format projects."
+    )
 
-    if st.button("Load Sample Data", type="primary"):
+    if st.button("Load demo data", type="primary"):
         try:
-            import pandas as pd
-            from pathlib import Path
-
-            sample_path = Path(__file__).parent.parent / "data" / "raw" / "sample_projects.csv"
-            if sample_path.exists():
-                df = pd.read_csv(sample_path)
-                st.session_state["projects_df"] = df
-                st.success(f"✅ Loaded {len(df)} sample projects!")
-                st.rerun()
+            df, source = _load_demo_data()
+            st.session_state["projects_df"] = df
+            if source == "jira":
+                st.success(f"✅ Loaded {len(df)} projects from processed JIRA data.")
             else:
-                st.error("Sample data file not found.")
+                st.success(
+                    f"✅ Generated {len(df)} synthetic demo projects (no "
+                    "`jira_projects.csv` found — run preprocessing or place the file under "
+                    "`data/processed/`)."
+                )
+            st.rerun()
         except Exception as e:
-            st.error(f"Error loading sample data: {e}")
+            st.error(f"Error loading demo data: {e}")
 
     # Footer
     st.markdown("---")

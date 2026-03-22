@@ -305,7 +305,7 @@
 - Export functionality works for all result types
 
 **Deliverables:**
-- `app.py` - main Streamlit application
+- `main.py` - main Streamlit application
 - `pages/` - individual page modules
 - `components/` - reusable UI components
 - `styles.css` - custom styling
@@ -402,7 +402,6 @@ prism/
 │   ├── settings.py                    # Application settings (paths, constants)
 │   ├── logging_config.yaml            # Logging configuration
 │   ├── model_config.yaml              # ML model hyperparameters
-│   ├── llm_config.yaml                # LLM prompts and parameters
 │   ├── mcda_config.yaml               # MCDA criteria and weights
 │   └── ui_config.yaml                 # Dashboard themes and layouts
 │
@@ -423,17 +422,11 @@ prism/
 │       └── validation_rules.yaml      # Data quality rules
 │
 ├── models/                            # Trained models (gitignored)
-│   ├── ml/                            # Machine learning models
-│   │   ├── random_forest_v1.pkl
-│   │   ├── xgboost_v1.pkl
-│   │   └── best_model.pkl             # Production model
-│   ├── scalers/                       # Feature scalers
-│   │   └── standard_scaler.pkl
-│   ├── encoders/                      # Categorical encoders
-│   │   └── label_encoder.pkl
-│   └── metadata/                      # Model metadata
-│       ├── model_registry.json        # Model versions and performance
-│       └── feature_names.json         # Feature list for each model
+│   └── ml/                            # Machine learning models & feature_names.json
+│       ├── random_forest_v1.pkl
+│       ├── xgboost_v1.pkl
+│       ├── best_model.pkl             # Production model
+│       └── feature_names.json         # Feature columns aligned with training
 │
 ├── src/                               # Source code
 │   ├── __init__.py
@@ -450,7 +443,6 @@ prism/
 │   │   ├── __init__.py
 │   │   ├── ml/
 │   │   │   ├── __init__.py
-│   │   │   ├── base_model.py          # Abstract base class
 │   │   │   ├── random_forest.py       # RF implementation
 │   │   │   ├── gradient_boosting.py   # XGBoost/LightGBM
 │   │   │   ├── neural_network.py      # Simple MLP
@@ -506,7 +498,7 @@ prism/
 │       └── constants.py               # Application constants
 │
 ├── app/                               # Streamlit application
-│   ├── app.py                         # Main entry point
+│   ├── main.py                        # Main entry point
 │   ├── pages/                         # Multi-page app
 │   │   ├── 1_📊_Dashboard.py          # Overview dashboard
 │   │   ├── 2_📁_Upload_Data.py        # Data upload page
@@ -639,7 +631,7 @@ prism/
 - **`utils/`**: Shared utilities; DRY principle
 
 **`app/`**: User interface (Streamlit)
-- `app.py`: Entry point that launches the dashboard
+- `main.py`: Entry point that launches the dashboard
 - `pages/`: Multi-page app structure; each page is self-contained
 - `components/`: Reusable UI elements; consistent design
 - `styles/`: Custom CSS for branding and UX
@@ -947,7 +939,7 @@ cp .env.example .env
 pytest tests/
 
 # Launch dashboard
-streamlit run app/app.py
+streamlit run app/main.py
 ```
 
 #### Docker Setup (Optional)
@@ -961,7 +953,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 EXPOSE 8501
-CMD ["streamlit", "run", "app/app.py"]
+CMD ["streamlit", "run", "app/main.py"]
 ```
 
 ---

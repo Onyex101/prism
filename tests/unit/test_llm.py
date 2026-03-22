@@ -154,9 +154,15 @@ class TestLLMAnalyzer:
                         {"project_name": "P1", "status_comments": "Good progress on the project."},
                         {"project_name": "P2", "status_comments": "Some delays observed."},
                     ]
-                    results = analyzer.analyze_batch(projects)
+                    progress_calls: list[tuple[int, int, str]] = []
+
+                    def _cb(done: int, total: int, name: str, result: dict) -> None:
+                        progress_calls.append((done, total, name))
+
+                    results = analyzer.analyze_batch(projects, on_progress=_cb)
 
                     assert len(results) == 2
+                    assert progress_calls == [(1, 2, "P1"), (2, 2, "P2")]
                     assert results[0]["project_name"] == "P1"
                     assert "sentiment_score" in results[0]
         except ImportError:

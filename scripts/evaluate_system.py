@@ -34,16 +34,29 @@ def run_ml_evaluation(df: pd.DataFrame) -> tuple[pd.DataFrame, dict | None]:
     from src.models.ml import MLTrainer, ModelEvaluator
 
     exclude = [
-        "project_id", "project_name", "risk_level", "status_comments",
-        "project_description", "team_feedback", "start_date", "planned_end_date",
-        "actual_end_date", "technology_stack", "stakeholder_notes",
+        "project_id",
+        "project_name",
+        "risk_level",
+        "status_comments",
+        "project_description",
+        "team_feedback",
+        "start_date",
+        "planned_end_date",
+        "actual_end_date",
+        "technology_stack",
+        "stakeholder_notes",
     ]
     feature_cols = [
-        c for c in df.columns
+        c
+        for c in df.columns
         if c not in exclude and df[c].dtype in ["int64", "float64", "int32", "float32"]
     ]
     X = df[feature_cols].fillna(0)
-    y = (df["risk_level"] == "High").astype(int) if "risk_level" in df.columns else (df["completion_rate"] < 50).astype(int)
+    y = (
+        (df["risk_level"] == "High").astype(int)
+        if "risk_level" in df.columns
+        else (df["completion_rate"] < 50).astype(int)
+    )
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
@@ -55,13 +68,21 @@ def run_ml_evaluation(df: pd.DataFrame) -> tuple[pd.DataFrame, dict | None]:
     trainer.train(X_train, y_train)
 
     y_pred = trainer.model.predict(X_test)
-    y_proba = trainer.model.predict_proba(X_test)[:, -1] if hasattr(trainer.model, "predict_proba") else y_pred
+    y_proba = (
+        trainer.model.predict_proba(X_test)[:, -1]
+        if hasattr(trainer.model, "predict_proba")
+        else y_pred
+    )
 
     evaluator = ModelEvaluator()
     eval_results = evaluator.evaluate(y_test, y_pred, y_proba)
 
     df = df.copy()
-    probas = trainer.model.predict_proba(X)[:, -1] if hasattr(trainer.model, "predict_proba") else trainer.model.predict(X)
+    probas = (
+        trainer.model.predict_proba(X)[:, -1]
+        if hasattr(trainer.model, "predict_proba")
+        else trainer.model.predict(X)
+    )
     df["risk_score"] = probas
     df["risk_level_ml"] = ["High" if p >= 0.6 else "Medium" if p >= 0.3 else "Low" for p in probas]
 
@@ -79,14 +100,20 @@ def run_llm_analysis(df: pd.DataFrame, api_key: str | None, max_projects: int = 
 
         analyzer = LLMAnalyzer(api_key=api_key, model="gpt-3.5-turbo")
         projects = df.head(max_projects).to_dict(orient="records")
-        results = analyzer.analyze_batch(projects, text_field="status_comments", name_field="project_name")
+        results = analyzer.analyze_batch(
+            projects, text_field="status_comments", name_field="project_name"
+        )
 
         extractor = RiskExtractor()
         extractor.extract(results)
         llm_df = extractor.to_dataframe()
 
         df = df.copy()
-        merged = df.merge(llm_df[["project_name", "sentiment_score", "sentiment_label"]], on="project_name", how="left")
+        merged = df.merge(
+            llm_df[["project_name", "sentiment_score", "sentiment_label"]],
+            on="project_name",
+            how="left",
+        )
         df["sentiment_score"] = merged["sentiment_score"]
         df["sentiment_label"] = merged["sentiment_label"]
         logger.info(f"LLM analyzed {len(results)} projects")
@@ -109,7 +136,9 @@ def run_mcda_ranking(df: pd.DataFrame) -> pd.DataFrame:
 
     if "risk_level" in df.columns:
         df = df.drop(columns=["risk_level"])
-    df = df.merge(rankings[["project_id", "mcda_score", "rank", "risk_level"]], on="project_id", how="left")
+    df = df.merge(
+        rankings[["project_id", "mcda_score", "rank", "risk_level"]], on="project_id", how="left"
+    )
     return df
 
 
@@ -152,9 +181,21 @@ def generate_report(
 def main():
     """Main evaluation function."""
     parser = argparse.ArgumentParser(description="Evaluate PRISM hybrid system")
-    parser.add_argument("--data", type=Path, default=Path("data/raw/sample_projects.csv"), help="Path to input data")
-    parser.add_argument("--output", type=Path, default=Path("reports/evaluation_report.md"), help="Report output path")
-    parser.add_argument("--api-key", type=str, default=None, help="OpenAI API key for LLM (optional)")
+    parser.add_argument(
+        "--data",
+        type=Path,
+        default=Path("data/processed/jira_projects.csv"),
+        help="Path to input data (default: processed Jira CSV)",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("reports/evaluation_report.md"),
+        help="Report output path",
+    )
+    parser.add_argument(
+        "--api-key", type=str, default=None, help="OpenAI API key for LLM (optional)"
+    )
     parser.add_argument("--no-llm", action="store_true", help="Skip LLM analysis")
     args = parser.parse_args()
 

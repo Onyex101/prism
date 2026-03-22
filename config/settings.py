@@ -1,7 +1,18 @@
 """
-PRISM Application Settings
+PRISM application settings
+==========================
 
-Centralized settings management using environment variables and defaults.
+``Settings`` is populated at import time from environment variables (see
+``env_template.txt``). Defaults favor local development (``DEBUG=true``).
+
+**Important fields**
+
+- ``OPENAI_*``: LLM pages and scripts; leave key empty only for offline demos.
+- ``ML_RANDOM_STATE``: Seeds sklearn/XGBoost training for reproducibility.
+- ``LLM_*``: Cache directory under ``.cache/llm_responses`` and retry policy.
+- ``STREAMLIT_*``: Host/port when not using Streamlit CLI defaults.
+
+Call ``Settings.validate()`` before production runs if you require an API key.
 """
 
 import os
@@ -15,7 +26,12 @@ load_dotenv()
 
 
 class Settings:
-    """Application settings loaded from environment variables."""
+    """
+    Application settings loaded from environment variables.
+
+    Attributes mirror keys in ``env_template.txt``. Paths are absolute under
+    :attr:`PROJECT_ROOT`.
+    """
 
     # Project paths
     PROJECT_ROOT: Path = Path(__file__).parent.parent
@@ -31,7 +47,7 @@ class Settings:
 
     # OpenAI settings
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
-    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4.1")
     OPENAI_MAX_TOKENS: int = int(os.getenv("OPENAI_MAX_TOKENS", "2000"))
     OPENAI_TEMPERATURE: float = float(os.getenv("OPENAI_TEMPERATURE", "0.0"))
 

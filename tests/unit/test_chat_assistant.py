@@ -53,7 +53,12 @@ class TestChatAssistant:
 
                     assistant = ChatAssistant(api_key="dummy-key")
                     rankings_no_risk = pd.DataFrame(
-                        {"project_id": ["P1"], "project_name": ["A"], "mcda_score": [0.5], "rank": [1]}
+                        {
+                            "project_id": ["P1"],
+                            "project_name": ["A"],
+                            "mcda_score": [0.5],
+                            "rank": [1],
+                        }
                     )
                     assistant.set_context(rankings_df=rankings_no_risk)
                     assert assistant.context_data.get("high_risk_count", 0) == 0

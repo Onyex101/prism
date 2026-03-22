@@ -132,7 +132,7 @@ PRISM provides:
 ```
 prism/
 ├── app/                          # Streamlit application
-│   ├── app.py                    # Main entry point
+│   ├── main.py                   # Main entry point
 │   └── pages/                    # Dashboard pages
 │       ├── 1_📊_Dashboard.py
 │       ├── 2_📁_Upload_Data.py
@@ -152,7 +152,6 @@ prism/
 │   │
 │   ├── models/                   # ML and LLM models
 │   │   ├── ml/                   # Machine learning
-│   │   │   ├── base_model.py     # Base model interface
 │   │   │   ├── trainer.py        # Model training
 │   │   │   ├── predictor.py      # Predictions
 │   │   │   └── evaluator.py      # Model evaluation
@@ -181,7 +180,6 @@ prism/
 │   ├── settings.py               # Application settings
 │   ├── mcda_config.yaml          # MCDA weights
 │   ├── model_config.yaml         # ML model parameters
-│   ├── llm_config.yaml           # LLM settings
 │   ├── logging_config.yaml       # Logging configuration
 │   └── ui_config.yaml            # UI settings
 │
@@ -241,15 +239,19 @@ cp env_template.txt .env
 pytest tests/
 
 # 6. Launch dashboard
-streamlit run app/app.py
+streamlit run app/main.py
 ```
 
 ### First-Time Usage
 
-1. **Open your browser** to `http://localhost:8501`
-2. **Click "Load Sample Data"** on the home page (or upload your own CSV)
-3. **Navigate to different pages** to explore ML Analysis, LLM Insights, Rankings
-4. **Use the Chat Assistant** to ask questions about your projects
+1. **Prepare data** — download the [Apache JIRA dataset](https://www.kaggle.com/datasets/tedlozzo/apaches-jira-issues) into `data/raw/` and run:
+   ```bash
+   python scripts/preprocess_jira_data.py --sample 50
+   ```
+2. **Open your browser** to `http://localhost:8501`
+3. **Upload the processed file** (`data/processed/jira_projects.csv`) via the Upload Data page
+4. **Navigate to different pages** to explore ML Analysis, LLM Insights, Rankings
+5. **Use the Chat Assistant** to ask questions about your projects
 
 ---
 
@@ -282,15 +284,20 @@ Real project data should be placed in `data/raw/`. The system supports:
 
 ### Jira Data Integration
 
-Use the preprocessing script to convert Jira exports:
+Download the [Apache JIRA Issues dataset](https://www.kaggle.com/datasets/tedlozzo/apaches-jira-issues) into `data/raw/`, then run the preprocessing script to convert issue-level data into project-level metrics:
 
 ```bash
-# Process Jira data export
-python scripts/preprocess_jira_data.py --input data/raw/jira_export.csv
+# Top 50 projects (recommended for testing, ~10 min)
+python scripts/preprocess_jira_data.py --sample 50
 
-# Process specific projects
+# Specific projects
 python scripts/preprocess_jira_data.py --projects SPARK,KAFKA,FLINK
+
+# All 640 projects
+python scripts/preprocess_jira_data.py
 ```
+
+See [data/README.md](data/README.md) for full download instructions and schema documentation.
 
 ---
 

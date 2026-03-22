@@ -4,8 +4,11 @@ Project Ranker Module
 
 This module ranks projects using MCDA combining ML, LLM, and metric scores.
 
-It integrates risk scores from ML models, sentiment scores from LLM analysis,
-and performance metrics to produce a unified project risk ranking.
+    It integrates risk scores from ML models, sentiment scores from LLM analysis,
+    and performance metrics to produce a unified project risk ranking.
+
+    Default criteria: ml_risk_score (40%), llm_sentiment_score (25%),
+    schedule_performance_index (15%), blocker_ratio (10%), defect_rate (10%).
 
 Example:
     >>> from src.mcda.ranker import ProjectRanker
@@ -20,6 +23,9 @@ import pandas as pd
 from loguru import logger
 
 from src.mcda.topsis import TOPSIS
+
+# Log missing MCDA columns at most once per criterion per process (Streamlit reruns).
+_warned_missing_criteria: set[str] = set()
 
 
 class ProjectRanker:
@@ -49,8 +55,8 @@ class ProjectRanker:
         "ml_risk_score": {"weight": 0.40, "type": "cost"},
         "llm_sentiment_score": {"weight": 0.25, "type": "benefit"},
         "schedule_performance_index": {"weight": 0.15, "type": "benefit"},
-        "cost_performance_index": {"weight": 0.10, "type": "benefit"},
-        "team_stability": {"weight": 0.10, "type": "benefit"},
+        "blocker_ratio": {"weight": 0.10, "type": "cost"},
+        "defect_rate": {"weight": 0.10, "type": "cost"},
     }
 
     def __init__(self, criteria: Optional[dict] = None) -> None:
@@ -180,6 +186,21 @@ class ProjectRanker:
         if criterion == "team_stability":
             return self._get_team_stability(df, n_projects)
 
+        # Generic fallback: read directly from DataFrame column if it exists
+        if criterion in df.columns:
+            values = df[criterion].fillna(0).values.astype(float)
+            col_min, col_max = values.min(), values.max()
+            if col_max > col_min:
+                return (values - col_min) / (col_max - col_min)
+            return np.full(n_projects, 0.5)
+
+        if criterion not in _warned_missing_criteria:
+            logger.warning(
+                f"Criterion '{criterion}' not found in DataFrame or built-in handlers — using 0.5"
+            )
+            _warned_missing_criteria.add(criterion)
+        else:
+            logger.debug("Criterion '{}' still missing (already warned) — using 0.5", criterion)
         return np.full(n_projects, 0.5)
 
     def _get_ml_scores(
@@ -191,6 +212,8 @@ class ProjectRanker:
         """Get ML risk scores."""
         if ml_scores is not None:
             return ml_scores.values
+        if "ml_risk_score" in df.columns:
+            return df["ml_risk_score"].values
         if "risk_score" in df.columns:
             return df["risk_score"].values
         return np.full(n_projects, 0.5)
@@ -247,28 +270,20 @@ class ProjectRanker:
             }
         )
 
-        rankings["risk_level"] = rankings["mcda_score"].apply(self._classify_risk)
+        # Use percentile-based thresholds so the MCDA risk distribution
+        # roughly mirrors the input data (bottom third = High, top third = Low).
+        scores = rankings["mcda_score"].values
+        low_threshold = float(np.percentile(scores, 67))
+        high_threshold = float(np.percentile(scores, 33))
+        rankings["risk_level"] = rankings["mcda_score"].apply(
+            lambda s: "Low" if s >= low_threshold else ("High" if s <= high_threshold else "Medium")
+        )
 
         if "project_name" in projects_df.columns:
             name_map = projects_df.set_index("project_id")["project_name"].to_dict()
             rankings["project_name"] = rankings["project_id"].map(name_map)
 
         return rankings.sort_values("rank")
-
-    def _classify_risk(self, score: float) -> str:
-        """
-        Classify risk level based on MCDA score.
-
-        :param score: MCDA score (0-1, higher is better).
-        :type score: float
-        :return: Risk level string.
-        :rtype: str
-        """
-        if score >= 0.70:
-            return "Low"
-        if score >= 0.40:
-            return "Medium"
-        return "High"
 
     def get_rankings(self) -> pd.DataFrame:
         """
@@ -405,21 +420,22 @@ class ProjectRanker:
             # Test with increased weight
             self.criteria[criterion]["weight"] = min(1.0, original_weight + weight_variation)
             self.rank(projects_df)
-            increased_rankings = self.rankings["rank"].values
+            increased_ranks = self.rankings.set_index("project_id")["rank"]
 
             # Test with decreased weight
             self.criteria[criterion]["weight"] = max(0.0, original_weight - weight_variation)
             self.rank(projects_df)
-            decreased_rankings = self.rankings["rank"].values
+            decreased_ranks = self.rankings.set_index("project_id")["rank"]
 
-            # Calculate average rank change
+            # Calculate average rank change aligned by project_id
             avg_change = 0.0
             if original_rankings is not None:
-                original_ranks = original_rankings["rank"].values
-                avg_change = (
+                orig_ranks = original_rankings.set_index("project_id")["rank"]
+                common = orig_ranks.index
+                avg_change = float(
                     np.mean(
-                        np.abs(increased_rankings - original_ranks)
-                        + np.abs(decreased_rankings - original_ranks)
+                        np.abs(increased_ranks[common].values - orig_ranks.values)
+                        + np.abs(decreased_ranks[common].values - orig_ranks.values)
                     )
                     / 2
                 )

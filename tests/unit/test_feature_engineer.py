@@ -43,28 +43,27 @@ class TestFeatureEngineer:
         assert result["schedule_performance_index"].iloc[1] == 2.0
         assert result["schedule_performance_index"].iloc[2] == 0.5
 
-    def test_cost_performance_index(self):
-        """Test CPI calculation."""
+    def test_hours_variance_pct(self):
+        """Hours variance vs planned (no CPI — budget-only rows add no SPI)."""
         from src.data.feature_engineer import FeatureEngineer
 
         df = pd.DataFrame(
             {
-                "budget": [100000, 100000, 100000],
-                "spent": [100000, 50000, 200000],
+                "planned_hours": [100, 100, 100],
+                "actual_hours": [100, 50, 200],
             }
         )
 
         engineer = FeatureEngineer()
         result = engineer.create_features(df)
 
-        assert "cost_performance_index" in result.columns
-        # CPI = budget/spent
-        assert result["cost_performance_index"].iloc[0] == 1.0
-        assert result["cost_performance_index"].iloc[1] == 2.0
-        assert result["cost_performance_index"].iloc[2] == 0.5
+        assert "hours_variance_pct" in result.columns
+        assert result["hours_variance_pct"].iloc[0] == 0
+        assert result["hours_variance_pct"].iloc[1] == -50.0
+        assert result["hours_variance_pct"].iloc[2] == 100.0
 
-    def test_budget_variance_pct(self):
-        """Test budget variance calculation."""
+    def test_budget_only_no_schedule_features(self):
+        """Budget/spent alone do not produce SPI or hours variance (no hour columns)."""
         from src.data.feature_engineer import FeatureEngineer
 
         df = pd.DataFrame(
@@ -77,10 +76,8 @@ class TestFeatureEngineer:
         engineer = FeatureEngineer()
         result = engineer.create_features(df)
 
-        assert "budget_variance_pct" in result.columns
-        assert result["budget_variance_pct"].iloc[0] == 0
-        assert result["budget_variance_pct"].iloc[1] == 10
-        assert result["budget_variance_pct"].iloc[2] == -20
+        assert "schedule_performance_index" not in result.columns
+        assert "hours_variance_pct" not in result.columns
 
     def test_team_stability(self):
         """Test team stability calculation."""
@@ -143,7 +140,8 @@ class TestFeatureEngineer:
 
         assert isinstance(feature_names, list)
         assert len(feature_names) > 0
-        assert "cost_performance_index" in feature_names
+        assert "schedule_performance_index" in feature_names
+        assert "hours_variance_pct" in feature_names
 
     def test_temporal_features_with_reference_date(self):
         """Test temporal features with custom reference date."""

@@ -1,41 +1,41 @@
 """
 Rankings Page
 
-MCDA-based project prioritization using PRISM src modules.
+MCDA-based project prioritization (TOPSIS) aligned with notebooks and ProjectRanker.
 """
+
+from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+_p = Path(__file__).resolve().parent
+_repo_root = _p.parent.parent if _p.name == "pages" else _p.parent
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 import yaml
 
-st.set_page_config(page_title="Rankings - PRISM", page_icon="📈", layout="wide")
+from app.bootstrap import init_page
+from app.components import require_projects_df
+
+root = init_page()
+
+from src.data import FeatureEngineer
+from src.mcda.ranker import ProjectRanker
 
 st.title("📈 Project Rankings")
-st.markdown("MCDA-based project prioritization combining ML, LLM, and metrics")
+st.markdown("MCDA-based project prioritization combining ML, LLM, and JIRA metrics")
 
-# Check if data is loaded
-if "projects_df" not in st.session_state:
-    st.warning("⚠️ No data loaded. Please upload data first.")
-    if st.button("Go to Upload Page"):
-        st.switch_page("pages/2_📁_Upload_Data.py")
-    st.stop()
+df = require_projects_df().copy()
 
-df = st.session_state["projects_df"].copy()
-
-# Ensure project_id exists (ProjectRanker requires it)
 if "project_id" not in df.columns and "project_name" in df.columns:
     df["project_id"] = df["project_name"]
 
-# Run feature engineering if needed (for SPI, CPI, team_stability)
-if "schedule_performance_index" not in df.columns or "cost_performance_index" not in df.columns:
+if "schedule_performance_index" not in df.columns or "blocker_ratio" not in df.columns:
     try:
-        from src.data import FeatureEngineer
-
         fe = FeatureEngineer()
         df = fe.create_features(df)
     except Exception:
@@ -43,127 +43,165 @@ if "schedule_performance_index" not in df.columns or "cost_performance_index" no
 
 st.session_state["projects_df"] = df
 
-# Load MCDA config for default weights
-config_path = Path(__file__).parent.parent.parent / "config" / "mcda_config.yaml"
-default_weights = {
-    "ml_risk_score": 0.40,
-    "llm_sentiment_score": 0.25,
-    "schedule_performance_index": 0.15,
-    "cost_performance_index": 0.10,
-    "team_stability": 0.10,
-}
+config_path = root / "config" / "mcda_config.yaml"
+default_weights = {k: v["weight"] for k, v in ProjectRanker.DEFAULT_CRITERIA.items()}
+weight_profiles: dict = {}
 if config_path.exists():
     try:
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             mcda_config = yaml.safe_load(f)
         if mcda_config and "criteria" in mcda_config:
             for k, v in mcda_config["criteria"].items():
                 if isinstance(v, dict) and "weight" in v:
                     default_weights[k] = v["weight"]
+        weight_profiles = mcda_config.get("weight_profiles", {}) if mcda_config else {}
     except Exception:
         pass
 
-# MCDA Configuration
-st.markdown("### MCDA Configuration")
+profile_names = list(weight_profiles.keys())
+selected_profile = st.selectbox(
+    "Weight profile (notebook presets)",
+    options=["Custom"] + profile_names,
+    index=0,
+    help="Choose a preset from config/mcda_config.yaml or adjust sliders manually.",
+)
 
-st.markdown("Adjust the weights for each criterion (must sum to 1.0)")
+if selected_profile != "Custom" and selected_profile in weight_profiles:
+    preset = weight_profiles[selected_profile]
+    defaults_for_sliders = {k: float(preset.get(k, default_weights[k])) for k in default_weights}
+else:
+    defaults_for_sliders = {k: float(default_weights[k]) for k in default_weights}
+
+st.markdown("### MCDA Configuration")
+st.markdown(
+    "Adjust weights for each criterion (must sum to **1.0**). Criteria match notebook 05 / `ProjectRanker`."
+)
 
 col1, col2, col3, col4, col5 = st.columns(5)
-
+keys = [
+    "ml_risk_score",
+    "llm_sentiment_score",
+    "schedule_performance_index",
+    "blocker_ratio",
+    "defect_rate",
+]
+sliders: dict[str, float] = {}
 with col1:
-    w_ml = st.slider("ML Risk Score", 0.0, 1.0, float(default_weights["ml_risk_score"]), 0.05)
-
+    sliders["ml_risk_score"] = st.slider(
+        "ML risk", 0.0, 1.0, defaults_for_sliders.get("ml_risk_score", 0.4), 0.05
+    )
 with col2:
-    w_llm = st.slider("LLM Sentiment", 0.0, 1.0, float(default_weights["llm_sentiment_score"]), 0.05)
-
+    sliders["llm_sentiment_score"] = st.slider(
+        "LLM sentiment", 0.0, 1.0, defaults_for_sliders.get("llm_sentiment_score", 0.25), 0.05
+    )
 with col3:
-    w_spi = st.slider("Schedule Perf", 0.0, 1.0, float(default_weights["schedule_performance_index"]), 0.05)
-
+    sliders["schedule_performance_index"] = st.slider(
+        "SPI", 0.0, 1.0, defaults_for_sliders.get("schedule_performance_index", 0.15), 0.05
+    )
 with col4:
-    w_cpi = st.slider("Cost Perf", 0.0, 1.0, float(default_weights["cost_performance_index"]), 0.05)
-
+    sliders["blocker_ratio"] = st.slider(
+        "Blocker ratio", 0.0, 1.0, defaults_for_sliders.get("blocker_ratio", 0.10), 0.05
+    )
 with col5:
-    w_team = st.slider("Team Stability", 0.0, 1.0, float(default_weights["team_stability"]), 0.05)
+    sliders["defect_rate"] = st.slider(
+        "Defect rate", 0.0, 1.0, defaults_for_sliders.get("defect_rate", 0.10), 0.05
+    )
 
-total_weight = w_ml + w_llm + w_spi + w_cpi + w_team
+total_weight = sum(sliders.values())
 if abs(total_weight - 1.0) > 0.01:
     st.warning(f"⚠️ Weights sum to {total_weight:.2f}. Please adjust to sum to 1.0")
 
-# Run ranking
+criteria = {
+    "ml_risk_score": {"weight": sliders["ml_risk_score"], "type": "cost"},
+    "llm_sentiment_score": {"weight": sliders["llm_sentiment_score"], "type": "benefit"},
+    "schedule_performance_index": {
+        "weight": sliders["schedule_performance_index"],
+        "type": "benefit",
+    },
+    "blocker_ratio": {"weight": sliders["blocker_ratio"], "type": "cost"},
+    "defect_rate": {"weight": sliders["defect_rate"], "type": "cost"},
+}
+
 if st.button("🎯 Calculate Rankings", type="primary"):
     with st.spinner("Calculating MCDA rankings..."):
         try:
-            from src.mcda import ProjectRanker
-
-            criteria = {
-                "ml_risk_score": {"weight": w_ml, "type": "cost"},
-                "llm_sentiment_score": {"weight": w_llm, "type": "benefit"},
-                "schedule_performance_index": {"weight": w_spi, "type": "benefit"},
-                "cost_performance_index": {"weight": w_cpi, "type": "benefit"},
-                "team_stability": {"weight": w_team, "type": "benefit"},
-            }
-
             ranker = ProjectRanker(criteria=criteria)
             rankings_df = ranker.rank(df)
+            rankings_df = rankings_df.rename(columns={"risk_level": "mcda_risk_level"})
 
-            # Merge rankings back into projects_df
-            merged = df.merge(
-                rankings_df[["project_id", "mcda_score", "rank", "risk_level"]],
+            merge_cols = ["project_id", "mcda_score", "rank", "mcda_risk_level"]
+            merged = df.drop(
+                columns=["mcda_score", "rank", "mcda_risk_level"], errors="ignore"
+            ).merge(
+                rankings_df[merge_cols],
                 on="project_id",
                 how="left",
             )
             st.session_state["projects_df"] = merged
             st.session_state["rankings_df"] = rankings_df
-
+            st.session_state["last_ranker"] = ranker
             st.success("✅ Rankings calculated!")
-
         except Exception as e:
             st.error(f"Ranking failed: {e}")
             import traceback
 
             st.code(traceback.format_exc())
 
-# Display rankings
 disp_df = st.session_state.get("projects_df", df)
 if "mcda_score" in disp_df.columns:
     st.markdown("---")
     st.markdown("### Project Rankings")
 
     col1, col2, col3 = st.columns(3)
-
     with col1:
-        high_risk = (disp_df["risk_level"] == "High").sum()
-        st.metric("High Risk", high_risk)
-
+        high_risk = (
+            (disp_df["mcda_risk_level"] == "High").sum()
+            if "mcda_risk_level" in disp_df.columns
+            else 0
+        )
+        st.metric("High (MCDA)", int(high_risk))
     with col2:
-        medium_risk = (disp_df["risk_level"] == "Medium").sum()
-        st.metric("Medium Risk", medium_risk)
-
+        med = (
+            (disp_df["mcda_risk_level"] == "Medium").sum()
+            if "mcda_risk_level" in disp_df.columns
+            else 0
+        )
+        st.metric("Medium (MCDA)", int(med))
     with col3:
-        low_risk = (disp_df["risk_level"] == "Low").sum()
-        st.metric("Low Risk", low_risk)
+        low = (
+            (disp_df["mcda_risk_level"] == "Low").sum()
+            if "mcda_risk_level" in disp_df.columns
+            else 0
+        )
+        st.metric("Low (MCDA)", int(low))
 
     try:
         from src.visualization.risk_charts import RiskCharts
 
         rankings_for_chart = st.session_state.get("rankings_df", disp_df)
-        if "risk_level" in rankings_for_chart.columns:
+        if "mcda_risk_level" in rankings_for_chart.columns:
+            tmp = rankings_for_chart.rename(columns={"mcda_risk_level": "risk_level"})
             fig = RiskCharts.risk_score_bar(
-                rankings_for_chart,
+                tmp,
                 top_n=15,
-                name_col="project_name" if "project_name" in rankings_for_chart.columns else "project_id",
+                name_col="project_name" if "project_name" in tmp.columns else "project_id",
                 score_col="mcda_score",
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
     except Exception:
         import plotly.graph_objects as go
 
         sorted_df = disp_df.sort_values("mcda_score", ascending=True).head(15)
         name_col = "project_name" if "project_name" in sorted_df.columns else "project_id"
-        colors = [
-            "#FF4B4B" if l == "High" else "#FFA500" if l == "Medium" else "#00CC66"
-            for l in sorted_df["risk_level"]
-        ]
+        rl = "mcda_risk_level" if "mcda_risk_level" in sorted_df.columns else None
+        colors = (
+            [
+                "#FF4B4B" if l == "High" else "#FFA500" if l == "Medium" else "#00CC66"
+                for l in sorted_df[rl]
+            ]
+            if rl
+            else ["#1E88E5"] * len(sorted_df)
+        )
         fig = go.Figure(
             data=[
                 go.Bar(
@@ -182,20 +220,18 @@ if "mcda_score" in disp_df.columns:
             yaxis_title="Project",
             height=max(400, len(sorted_df) * 30),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     st.markdown("### Full Rankings Table")
-
-    display_cols = ["rank", "project_name", "mcda_score", "risk_level"]
+    display_cols = ["rank", "project_name", "mcda_score", "mcda_risk_level"]
     for col in ["completion_rate", "status", "priority"]:
         if col in disp_df.columns:
             display_cols.append(col)
-
-    rankings_df = disp_df[[col for col in display_cols if col in disp_df.columns]].sort_values("rank")
+    rankings_table = disp_df[[c for c in display_cols if c in disp_df.columns]].sort_values("rank")
 
     st.dataframe(
-        rankings_df,
-        use_container_width=True,
+        rankings_table,
+        width="stretch",
         hide_index=True,
         column_config={
             "mcda_score": st.column_config.ProgressColumn(
@@ -207,9 +243,7 @@ if "mcda_score" in disp_df.columns:
         },
     )
 
-    # Export
-    st.markdown("---")
-    csv = rankings_df.to_csv(index=False)
+    csv = rankings_table.to_csv(index=False)
     st.download_button(
         label="📥 Export Rankings to CSV",
         data=csv,
@@ -217,5 +251,26 @@ if "mcda_score" in disp_df.columns:
         mime="text/csv",
     )
 
+    ranker = st.session_state.get("last_ranker")
+    if ranker is not None:
+        with st.expander("Sensitivity analysis (±10% weight perturbation)", expanded=False):
+            try:
+                sens = ranker.sensitivity_analysis(df, weight_variation=0.10)
+                rows = []
+                for crit, data in sens.get("criteria_sensitivity", {}).items():
+                    rows.append(
+                        {
+                            "criterion": crit,
+                            "weight": data.get("original_weight"),
+                            "avg_rank_change": data.get("avg_rank_change"),
+                        }
+                    )
+                if rows:
+                    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+                    st.caption(
+                        "Higher average rank change means rankings are more sensitive to that criterion."
+                    )
+            except Exception as e:
+                st.info(f"Sensitivity analysis unavailable: {e}")
 else:
-    st.info("Click 'Calculate Rankings' to generate MCDA-based project prioritization.")
+    st.info("Click **Calculate Rankings** to generate MCDA-based project prioritization.")

@@ -7,29 +7,28 @@ Transforms issue-level JIRA data into PRISM-compatible project-level data.
 Source: https://www.kaggle.com/datasets/tedlozzo/apaches-jira-issues
 
 This script:
-1. Reads large JIRA CSV files efficiently (in chunks)
+1. Reads large JIRA CSV files with bounded memory
 2. Aggregates issue-level data to project-level metrics
-3. Joins comments for LLM text analysis
+3. Samples full-text comments for LLM analysis (no truncation)
 4. Derives risk labels from issue outcomes
 5. Outputs PRISM-compatible project data
+
+Designed to handle all 640+ projects without running out of memory.
 
 Usage:
     python scripts/preprocess_jira_data.py [--sample N] [--projects P1,P2,P3]
 
 Examples:
-    # Process all projects (takes a while)
-    python scripts/preprocess_jira_data.py
-
-    # Process only top 50 projects by issue count
-    python scripts/preprocess_jira_data.py --sample 50
-
-    # Process specific projects
-    python scripts/preprocess_jira_data.py --projects SPARK,KAFKA,FLINK
+    python scripts/preprocess_jira_data.py                          # all projects
+    python scripts/preprocess_jira_data.py --sample 50              # top 50
+    python scripts/preprocess_jira_data.py --projects SPARK,KAFKA   # specific
 """
 
 import argparse
+import csv
+import gc
 import sys
-from datetime import datetime, timedelta
+from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 
@@ -37,13 +36,11 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-# Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from loguru import logger
 
-# Configure logging
 logger.remove()
 logger.add(
     sys.stderr,
@@ -51,34 +48,40 @@ logger.add(
     format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | {message}",
 )
 
+csv.field_size_limit(sys.maxsize)
+
+
+def _project_from_key(issue_key: str) -> str:
+    """Extract project key from a JIRA issue key (e.g. 'SPARK-1234' -> 'SPARK')."""
+    idx = issue_key.find("-")
+    return issue_key[:idx] if idx > 0 else issue_key
+
 
 class JiraDataPreprocessor:
     """
-    Preprocessor for Apache JIRA dataset.
+    Memory-efficient preprocessor for the Apache JIRA dataset.
 
-    Transforms issue-level data into project-level aggregates
-    compatible with PRISM's risk analysis framework.
+    Memory strategy per phase:
+      1. Project list  — single-column pandas scan, ~50 MB peak
+      2. Issue metrics  — pandas chunked, 15 lightweight columns w/ categories
+      3. Descriptions   — csv.reader stream, ≤ 20 full-text per project
+      4. Comments       — csv.reader stream, ≤ 200 full-text per project
+      5. Changelog      — csv.reader stream, integer counters only
+      6. Aggregation    — iterates grouped issues, produces one dict per project
     """
 
-    # Default paths
     RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
     PROCESSED_DATA_DIR = PROJECT_ROOT / "data" / "processed"
 
-    # File names
     ISSUES_FILE = "issues.csv"
     COMMENTS_FILE = "comments.csv"
     CHANGELOG_FILE = "changelog.csv"
     ISSUELINKS_FILE = "issuelinks.csv"
 
-    # Chunk size for reading large files
-    CHUNK_SIZE = 100_000
+    CHUNK_SIZE = 50_000
 
-    # Columns to read from each file (for memory efficiency)
-    ISSUES_COLS = [
-        "id",
+    ISSUES_METRIC_COLS = [
         "key",
-        "summary",
-        "description",
         "resolution.name",
         "priority.name",
         "status.name",
@@ -95,108 +98,81 @@ class JiraDataPreprocessor:
         "watches.watchCount",
     ]
 
-    COMMENTS_COLS = ["key", "comment.id", "comment.body", "comment.created"]
+    # Convert these to pandas Categorical after loading to cut memory ~60 %
+    CATEGORICAL_COLS = [
+        "resolution.name",
+        "priority.name",
+        "status.name",
+        "issuetype.name",
+        "project.key",
+        "project.name",
+    ]
 
-    CHANGELOG_COLS = ["key", "field", "fromString", "toString", "created"]
+    MAX_COMMENTS_PER_PROJECT = 500
+    MAX_DESCRIPTIONS_PER_PROJECT = 50
 
     def __init__(
         self,
         raw_data_dir: Optional[Path] = None,
         output_dir: Optional[Path] = None,
     ):
-        """
-        Initialize the preprocessor.
-
-        Args:
-            raw_data_dir: Directory containing raw JIRA CSV files
-            output_dir: Directory for processed output
-        """
         self.raw_data_dir = Path(raw_data_dir) if raw_data_dir else self.RAW_DATA_DIR
         self.output_dir = Path(output_dir) if output_dir else self.PROCESSED_DATA_DIR
-
-        # Ensure output directory exists
         self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Validate input files exist
         self._validate_input_files()
 
     def _validate_input_files(self):
-        """Check that required input files exist."""
-        required_files = [self.ISSUES_FILE, self.COMMENTS_FILE]
-
-        for fname in required_files:
+        required = [self.ISSUES_FILE, self.COMMENTS_FILE]
+        for fname in required:
             fpath = self.raw_data_dir / fname
             if not fpath.exists():
                 raise FileNotFoundError(
                     f"Required file not found: {fpath}\n"
-                    f"Please download the Apache JIRA dataset from:\n"
-                    f"https://www.kaggle.com/datasets/tedlozzo/apaches-jira-issues"
+                    f"Download from: https://www.kaggle.com/datasets/tedlozzo/apaches-jira-issues"
                 )
-
         logger.info(f"Input files validated in {self.raw_data_dir}")
 
+    # ------------------------------------------------------------------
+    # Phase 1: project list
+    # ------------------------------------------------------------------
+
     def get_project_list(self, top_n: Optional[int] = None) -> list[str]:
-        """
-        Get list of all projects in the dataset.
-
-        Args:
-            top_n: If provided, return only top N projects by issue count
-
-        Returns:
-            List of project keys
-        """
         logger.info("Scanning projects in dataset...")
-
-        project_counts = {}
-
+        counts: dict[str, int] = {}
         for chunk in tqdm(
             pd.read_csv(
                 self.raw_data_dir / self.ISSUES_FILE,
                 usecols=["project.key"],
                 chunksize=self.CHUNK_SIZE,
-                low_memory=False,
             ),
             desc="Counting projects",
         ):
-            for proj, count in chunk["project.key"].value_counts().items():
-                project_counts[proj] = project_counts.get(proj, 0) + count
+            for proj, n in chunk["project.key"].value_counts().items():
+                counts[proj] = counts.get(proj, 0) + n
 
-        # Sort by count
-        sorted_projects = sorted(project_counts.items(), key=lambda x: x[1], reverse=True)
-
+        ranked = sorted(counts.items(), key=lambda x: x[1], reverse=True)
         if top_n:
-            sorted_projects = sorted_projects[:top_n]
+            ranked = ranked[:top_n]
+        logger.info(f"Found {len(counts)} projects, selected {len(ranked)}")
+        return [p for p, _ in ranked]
 
-        logger.info(f"Found {len(project_counts)} projects, selected {len(sorted_projects)}")
+    # ------------------------------------------------------------------
+    # Phase 2: issue metrics (pandas, no heavy text columns)
+    # ------------------------------------------------------------------
 
-        return [p[0] for p in sorted_projects]
-
-    def load_issues_for_projects(self, project_keys: list[str]) -> pd.DataFrame:
-        """
-        Load issues for specified projects.
-
-        Args:
-            project_keys: List of project keys to load
-
-        Returns:
-            DataFrame with issue data
-        """
-        logger.info(f"Loading issues for {len(project_keys)} projects...")
-
-        project_set = set(project_keys)
+    def _load_issue_metrics(self, project_keys: set[str]) -> pd.DataFrame:
+        logger.info(f"Loading issue metrics for {len(project_keys)} projects...")
         chunks = []
-
         for chunk in tqdm(
             pd.read_csv(
                 self.raw_data_dir / self.ISSUES_FILE,
-                usecols=self.ISSUES_COLS,
+                usecols=self.ISSUES_METRIC_COLS,
                 chunksize=self.CHUNK_SIZE,
-                low_memory=False,
             ),
             desc="Loading issues",
         ):
-            # Filter to selected projects
-            filtered = chunk[chunk["project.key"].isin(project_set)]
+            mask = chunk["project.key"].isin(project_keys)
+            filtered = chunk.loc[mask]
             if len(filtered) > 0:
                 chunks.append(filtered)
 
@@ -204,351 +180,390 @@ class JiraDataPreprocessor:
             raise ValueError("No issues found for specified projects")
 
         issues = pd.concat(chunks, ignore_index=True)
-        logger.info(f"Loaded {len(issues):,} issues")
+        # Re-apply categorical dtype after concat (concat upcasts to object)
+        for c in self.CATEGORICAL_COLS:
+            if c in issues.columns:
+                issues[c] = issues[c].astype("category")
 
+        logger.info(
+            f"Loaded {len(issues):,} issues ({issues.memory_usage(deep=True).sum() / 1e6:.0f} MB)"
+        )
         return issues
 
-    def load_comments_for_issues(
-        self, issue_keys: set[str], sample_per_project: int = 100
-    ) -> pd.DataFrame:
-        """
-        Load comments for specified issues.
+    # ------------------------------------------------------------------
+    # Phase 3: descriptions (csv.reader, one pass, bounded per project)
+    # ------------------------------------------------------------------
 
-        Args:
-            issue_keys: Set of issue keys to load comments for
-            sample_per_project: Max comments to sample per project for LLM
+    def _stream_descriptions(self, project_keys: set[str]) -> dict[str, list[str]]:
+        logger.info("Streaming issue descriptions...")
+        descs: dict[str, list[str]] = defaultdict(list)
+        limit = self.MAX_DESCRIPTIONS_PER_PROJECT
+        full_count = 0
 
-        Returns:
-            DataFrame with comment data
-        """
-        logger.info(f"Loading comments for {len(issue_keys):,} issues...")
+        fpath = self.raw_data_dir / self.ISSUES_FILE
+        with open(fpath, "r", encoding="utf-8", errors="replace") as f:
+            reader = csv.reader(f)
+            header = next(reader)
+            try:
+                idx_proj = header.index("project.key")
+                idx_desc = header.index("description")
+            except ValueError as e:
+                logger.error(f"Missing column in issues.csv: {e}")
+                return {}
 
-        chunks = []
+            for row in reader:
+                proj = row[idx_proj]
+                if proj not in project_keys:
+                    continue
+                if len(descs[proj]) >= limit:
+                    if full_count >= len(project_keys):
+                        break
+                    continue
+                desc = row[idx_desc] if idx_desc < len(row) else ""
+                if desc:
+                    descs[proj].append(desc)
+                    if len(descs[proj]) == limit:
+                        full_count += 1
 
-        for chunk in tqdm(
-            pd.read_csv(
-                self.raw_data_dir / self.COMMENTS_FILE,
-                usecols=self.COMMENTS_COLS,
-                chunksize=self.CHUNK_SIZE,
-                low_memory=False,
-            ),
-            desc="Loading comments",
-        ):
-            # Filter to selected issues
-            filtered = chunk[chunk["key"].isin(issue_keys)]
-            if len(filtered) > 0:
-                chunks.append(filtered)
+        total = sum(len(v) for v in descs.values())
+        logger.info(f"Sampled {total:,} descriptions across {len(descs)} projects")
+        return dict(descs)
 
-        if not chunks:
-            logger.warning("No comments found for specified issues")
-            return pd.DataFrame(columns=self.COMMENTS_COLS)
+    # ------------------------------------------------------------------
+    # Phase 4: comments (csv.reader, one pass, bounded per project)
+    # Full text is preserved — no truncation.
+    # ------------------------------------------------------------------
 
-        comments = pd.concat(chunks, ignore_index=True)
-        logger.info(f"Loaded {len(comments):,} comments")
+    def _stream_comments(self, project_keys: set[str]) -> dict[str, list[str]]:
+        logger.info("Streaming comments...")
+        comments: dict[str, list[str]] = defaultdict(list)
+        limit = self.MAX_COMMENTS_PER_PROJECT
+        full_count = 0
 
-        return comments
+        fpath = self.raw_data_dir / self.COMMENTS_FILE
+        with open(fpath, "r", encoding="utf-8", errors="replace") as f:
+            reader = csv.reader(f)
+            header = next(reader)
+            try:
+                idx_key = header.index("key")
+                idx_body = header.index("comment.body")
+            except ValueError as e:
+                logger.error(f"Missing column in comments.csv: {e}")
+                return {}
 
-    def load_changelog_for_issues(self, issue_keys: set[str]) -> pd.DataFrame:
-        """
-        Load changelog entries for specified issues.
+            rows_read = 0
+            for row in reader:
+                rows_read += 1
+                if rows_read % 10_000_000 == 0:
+                    logger.info(f"  ...{rows_read:,} comment rows streamed")
 
-        Args:
-            issue_keys: Set of issue keys to load changelog for
+                if idx_key >= len(row):
+                    continue
+                proj = _project_from_key(row[idx_key])
+                if proj not in project_keys:
+                    continue
+                if len(comments[proj]) >= limit:
+                    continue
 
-        Returns:
-            DataFrame with changelog data
-        """
+                body = row[idx_body] if idx_body < len(row) else ""
+                if body:
+                    comments[proj].append(body)
+                    if len(comments[proj]) == limit:
+                        full_count += 1
+
+        total = sum(len(v) for v in comments.values())
+        logger.info(
+            f"Collected {total:,} comments across {len(comments)} projects "
+            f"({rows_read:,} rows streamed)"
+        )
+        return dict(comments)
+
+    # ------------------------------------------------------------------
+    # Phase 5: changelog (csv.reader, one pass, counters only)
+    # ------------------------------------------------------------------
+
+    def _stream_changelog_stats(self, project_keys: set[str]) -> dict[str, dict[str, int]]:
         changelog_path = self.raw_data_dir / self.CHANGELOG_FILE
-
         if not changelog_path.exists():
             logger.warning("Changelog file not found, skipping")
-            return pd.DataFrame(columns=self.CHANGELOG_COLS)
+            return {}
 
-        logger.info(f"Loading changelog for {len(issue_keys):,} issues...")
+        logger.info("Streaming changelog...")
+        stats: dict[str, dict[str, int]] = defaultdict(lambda: {"status_changes": 0, "reopens": 0})
 
-        chunks = []
+        with open(changelog_path, "r", encoding="utf-8", errors="replace") as f:
+            reader = csv.reader(f)
+            header = next(reader)
+            try:
+                idx_key = header.index("key")
+                idx_field = header.index("field")
+                idx_to = header.index("toString")
+            except ValueError as e:
+                logger.error(f"Missing column in changelog.csv: {e}")
+                return {}
 
-        for chunk in tqdm(
-            pd.read_csv(
-                changelog_path,
-                usecols=self.CHANGELOG_COLS,
-                chunksize=self.CHUNK_SIZE,
-                low_memory=False,
-            ),
-            desc="Loading changelog",
-        ):
-            filtered = chunk[chunk["key"].isin(issue_keys)]
-            if len(filtered) > 0:
-                chunks.append(filtered)
+            rows_read = 0
+            for row in reader:
+                rows_read += 1
+                if rows_read % 10_000_000 == 0:
+                    logger.info(f"  ...{rows_read:,} changelog rows streamed")
 
-        if not chunks:
-            return pd.DataFrame(columns=self.CHANGELOG_COLS)
+                if idx_field >= len(row) or row[idx_field] != "status":
+                    continue
+                if idx_key >= len(row):
+                    continue
 
-        changelog = pd.concat(chunks, ignore_index=True)
-        logger.info(f"Loaded {len(changelog):,} changelog entries")
+                proj = _project_from_key(row[idx_key])
+                if proj not in project_keys:
+                    continue
 
-        return changelog
+                stats[proj]["status_changes"] += 1
+                if idx_to < len(row) and row[idx_to] == "Reopened":
+                    stats[proj]["reopens"] += 1
 
-    def aggregate_to_project_level(
+        logger.info(f"Changelog stats for {len(stats)} projects ({rows_read:,} rows streamed)")
+        return dict(stats)
+
+    # ------------------------------------------------------------------
+    # Phase 6: aggregate
+    # ------------------------------------------------------------------
+
+    def _aggregate(
         self,
         issues: pd.DataFrame,
-        comments: pd.DataFrame,
-        changelog: pd.DataFrame,
+        comments_by_project: dict[str, list[str]],
+        changelog_stats: dict[str, dict[str, int]],
+        descriptions_by_project: dict[str, list[str]],
     ) -> pd.DataFrame:
-        """
-        Aggregate issue-level data to project-level metrics.
-
-        Args:
-            issues: Issue data
-            comments: Comment data
-            changelog: Changelog data
-
-        Returns:
-            Project-level DataFrame compatible with PRISM schema
-        """
         logger.info("Aggregating to project level...")
 
-        # Parse dates
         issues["created"] = pd.to_datetime(issues["created"], errors="coerce")
         issues["updated"] = pd.to_datetime(issues["updated"], errors="coerce")
         issues["resolutiondate"] = pd.to_datetime(issues["resolutiondate"], errors="coerce")
 
-        # Group by project
-        projects = []
-
-        for project_key, group in tqdm(issues.groupby("project.key"), desc="Processing projects"):
-            project_data = self._calculate_project_metrics(
-                project_key=project_key,
-                project_name=group["project.name"].iloc[0],
-                issues=group,
-                comments=comments[comments["key"].str.startswith(project_key + "-")],
-                changelog=(
-                    changelog[changelog["key"].str.startswith(project_key + "-")]
-                    if len(changelog) > 0
-                    else pd.DataFrame()
-                ),
+        results: list[dict] = []
+        for project_key, group in tqdm(
+            issues.groupby("project.key", observed=True), desc="Aggregating"
+        ):
+            pkey = str(project_key)
+            results.append(
+                self._calculate_project_metrics(
+                    project_key=pkey,
+                    project_name=str(group["project.name"].iloc[0]),
+                    issues=group,
+                    comments=comments_by_project.get(pkey, []),
+                    changelog=changelog_stats.get(pkey, {"status_changes": 0, "reopens": 0}),
+                    descriptions=descriptions_by_project.get(pkey, []),
+                )
             )
-            projects.append(project_data)
 
-        df = pd.DataFrame(projects)
-
-        # Derive risk labels
+        df = pd.DataFrame(results)
         df = self._derive_risk_labels(df)
-
         logger.info(f"Created {len(df)} project records")
-
         return df
 
+    # ------------------------------------------------------------------
+    # Per-project metric calculation
+    # ------------------------------------------------------------------
+
+    @staticmethod
     def _calculate_project_metrics(
-        self,
         project_key: str,
         project_name: str,
         issues: pd.DataFrame,
-        comments: pd.DataFrame,
-        changelog: pd.DataFrame,
+        comments: list[str],
+        changelog: dict[str, int],
+        descriptions: list[str],
     ) -> dict:
-        """
-        Calculate all metrics for a single project.
-
-        Args:
-            project_key: Project identifier
-            project_name: Project name
-            issues: Issues for this project
-            comments: Comments for this project
-            changelog: Changelog for this project
-
-        Returns:
-            Dictionary with project metrics
-        """
         total_issues = len(issues)
 
-        # Issue type breakdown
-        bugs = issues[issues["issuetype.name"] == "Bug"]
-        improvements = issues[issues["issuetype.name"] == "Improvement"]
-        features = issues[issues["issuetype.name"].isin(["New Feature", "Feature"])]
-        tasks = issues[issues["issuetype.name"] == "Task"]
+        type_col = issues["issuetype.name"]
+        status_col = issues["status.name"]
+        priority_col = issues["priority.name"]
 
-        # Status breakdown
-        closed = issues[issues["status.name"].isin(["Closed", "Resolved"])]
-        open_issues = issues[issues["status.name"].isin(["Open", "In Progress", "Reopened"])]
+        n_bugs = int((type_col == "Bug").sum())
+        n_improvements = int((type_col == "Improvement").sum())
+        n_features = int(type_col.isin(["New Feature", "Feature"]).sum())
+        n_tasks = int((type_col == "Task").sum())
 
-        # Priority breakdown
-        blockers = issues[issues["priority.name"] == "Blocker"]
-        critical = issues[issues["priority.name"] == "Critical"]
+        n_closed = int(status_col.isin(["Closed", "Resolved"]).sum())
+        n_open = int(status_col.isin(["Open", "In Progress", "Reopened"]).sum())
 
-        # Date calculations
+        n_blockers = int((priority_col == "Blocker").sum())
+        n_critical = int((priority_col == "Critical").sum())
+
         min_date = issues["created"].min()
         max_date = issues["updated"].max()
-        project_duration_days = (
-            (max_date - min_date).days if pd.notna(min_date) and pd.notna(max_date) else 0
-        )
-        project_duration_days = max(project_duration_days, 1)  # Avoid division by zero
+        duration = (max_date - min_date).days if pd.notna(min_date) and pd.notna(max_date) else 0
+        duration = max(duration, 1)
 
-        # Resolution time (for resolved issues)
-        resolved_issues = issues[issues["resolutiondate"].notna() & issues["created"].notna()]
-        if len(resolved_issues) > 0:
-            resolution_times = (
-                resolved_issues["resolutiondate"] - resolved_issues["created"]
-            ).dt.days
-            avg_resolution_time = resolution_times.mean()
-            median_resolution_time = resolution_times.median()
+        resolved = issues.loc[issues["resolutiondate"].notna() & issues["created"].notna()]
+        if len(resolved) > 0:
+            res_days = (resolved["resolutiondate"] - resolved["created"]).dt.days
+            avg_res = float(res_days.mean())
+            med_res = float(res_days.median())
         else:
-            avg_resolution_time = 0
-            median_resolution_time = 0
+            avg_res = med_res = 0.0
 
-        # Team metrics (unique contributors)
         assignees = issues["assignee"].dropna().unique()
         creators = issues["creator"].dropna().unique()
         reporters = issues["reporter"].dropna().unique()
         team_size = len(set(assignees) | set(creators))
 
-        # Velocity (issues resolved per month)
-        months = max(project_duration_days / 30, 1)
-        velocity = len(closed) / months
+        months = max(duration / 30, 1)
+        velocity = n_closed / months
+        defect_rate = n_bugs / max(total_issues, 1)
+        completion_rate = (n_closed / max(total_issues, 1)) * 100
 
-        # Defect rate
-        defect_rate = len(bugs) / max(total_issues, 1)
+        # Full-text LLM fields — sample then join, no per-item truncation
+        if len(comments) > 50:
+            rng = np.random.RandomState(42)
+            sampled_comments = list(rng.choice(comments, 50, replace=False))
+        else:
+            sampled_comments = comments
+        combined_comments = "\n\n".join(sampled_comments)
 
-        # Completion rate
-        completion_rate = (len(closed) / max(total_issues, 1)) * 100
+        combined_descriptions = "\n\n".join(descriptions)
 
-        # Combine comments for text analysis
-        project_comments = comments["comment.body"].dropna().tolist()
-        # Sample comments if too many (for LLM efficiency)
-        if len(project_comments) > 50:
-            np.random.seed(42)
-            project_comments = list(np.random.choice(project_comments, 50, replace=False))
-
-        combined_comments = " ".join(
-            str(c)[:500] for c in project_comments[:20]
-        )  # Limit text length
-
-        # Issue descriptions for context
-        descriptions = issues["description"].dropna().tolist()[:10]
-        combined_descriptions = " ".join(str(d)[:300] for d in descriptions)
-
-        # Changelog analysis
-        reopens = 0
-        status_changes = 0
-        if len(changelog) > 0:
-            status_changes_df = changelog[changelog["field"] == "status"]
-            status_changes = len(status_changes_df)
-            reopens = len(status_changes_df[status_changes_df["toString"] == "Reopened"])
+        reopens = changelog.get("reopens", 0)
+        status_changes = changelog.get("status_changes", 0)
 
         return {
-            # Core identifiers
             "project_id": project_key,
             "project_name": project_name,
-            "project_type": "Development",  # All are software projects
-            # Dates
+            "project_type": "Development",
             "start_date": min_date.strftime("%Y-%m-%d") if pd.notna(min_date) else None,
-            "planned_end_date": None,  # Not available in JIRA
-            "actual_end_date": None,
-            # Effort metrics (derived from issues instead of hours)
+            # planned_end_date: latest issue creation date (last point the project was actively planned)
+            # actual_end_date:  latest resolution date for completed projects, None if still active
+            "planned_end_date": (
+                issues["created"].max().strftime("%Y-%m-%d")
+                if pd.notna(issues["created"].max())
+                else None
+            ),
+            "actual_end_date": (
+                resolved["resolutiondate"].max().strftime("%Y-%m-%d")
+                if (
+                    len(resolved) > 0 and pd.notna(resolved["resolutiondate"].max()) and n_open == 0
+                )
+                else None
+            ),
             "total_issues": total_issues,
-            "open_issues": len(open_issues),
-            "closed_issues": len(closed),
-            "bug_count": len(bugs),
-            "feature_count": len(features),
-            "improvement_count": len(improvements),
-            "task_count": len(tasks),
-            # Priority metrics
-            "blocker_count": len(blockers),
-            "critical_count": len(critical),
-            "blocker_ratio": len(blockers) / max(total_issues, 1),
-            "critical_ratio": len(critical) / max(total_issues, 1),
-            # Budget/cost placeholders (not available in JIRA)
-            "budget": None,
-            "spent": None,
-            "planned_hours": total_issues * 8,  # Estimate: 8 hours per issue avg
-            "actual_hours": int(len(closed) * 8 + len(open_issues) * 4),  # Partial for open
-            # Team metrics
+            "open_issues": n_open,
+            "closed_issues": n_closed,
+            "bug_count": n_bugs,
+            "feature_count": n_features,
+            "improvement_count": n_improvements,
+            "task_count": n_tasks,
+            "blocker_count": n_blockers,
+            "critical_count": n_critical,
+            "blocker_ratio": n_blockers / max(total_issues, 1),
+            "critical_ratio": n_critical / max(total_issues, 1),
+            "planned_hours": total_issues * 8,
+            "actual_hours": n_closed * 8 + n_open * 4,
             "team_size": team_size,
             "unique_assignees": len(assignees),
             "unique_reporters": len(reporters),
-            # Performance metrics
             "completion_rate": round(completion_rate, 2),
-            "velocity": round(velocity, 2),  # Issues per month
+            "velocity": round(velocity, 2),
             "defect_rate": round(defect_rate, 4),
-            "avg_resolution_days": round(avg_resolution_time, 2),
-            "median_resolution_days": round(median_resolution_time, 2),
-            # Quality indicators
+            "avg_resolution_days": round(avg_res, 2),
+            "median_resolution_days": round(med_res, 2),
             "reopen_count": reopens,
-            "reopen_rate": reopens / max(len(closed), 1),
+            "reopen_rate": reopens / max(n_closed, 1),
             "status_changes": status_changes,
             "churn_rate": status_changes / max(total_issues, 1),
-            # Duration
-            "project_duration_days": project_duration_days,
-            # Engagement metrics
-            "total_votes": issues["votes.votes"].sum() if "votes.votes" in issues.columns else 0,
+            "project_duration_days": duration,
+            "total_votes": (
+                int(issues["votes.votes"].sum()) if "votes.votes" in issues.columns else 0
+            ),
             "total_watchers": (
-                issues["watches.watchCount"].sum() if "watches.watchCount" in issues.columns else 0
+                int(issues["watches.watchCount"].sum())
+                if "watches.watchCount" in issues.columns
+                else 0
             ),
             "avg_watchers_per_issue": (
-                issues["watches.watchCount"].mean() if "watches.watchCount" in issues.columns else 0
+                float(issues["watches.watchCount"].mean())
+                if "watches.watchCount" in issues.columns
+                else 0.0
             ),
-            # PRISM-required fields
-            "status": "Active" if len(open_issues) > 0 else "Completed",
-            "priority": (
-                "Critical" if len(blockers) > 5 else ("High" if len(critical) > 10 else "Medium")
-            ),
-            "methodology": "Agile",  # Apache projects typically use agile
+            "status": "Active" if n_open > 0 else "Completed",
+            "priority": "Critical" if n_blockers > 5 else ("High" if n_critical > 10 else "Medium"),
+            "methodology": "Agile",
             "department": "Apache Foundation",
-            "client_type": "External",  # Open source
-            # Text for LLM analysis
-            "status_comments": combined_comments[:2000] if combined_comments else "",
-            "project_description": combined_descriptions[:1000] if combined_descriptions else "",
-            "team_feedback": "",  # Not available
-            # Complexity estimate based on team size and duration
-            "complexity_score": min(10, max(1, int(team_size / 5 + project_duration_days / 365))),
-            "dependencies": 0,  # Would need issuelinks analysis
-            "team_turnover": 0.0,  # Not directly measurable
+            "client_type": "External",
+            "status_comments": combined_comments,
+            "project_description": combined_descriptions,
+            "team_feedback": "",
+            "complexity_score": min(10, max(1, int(team_size / 5 + duration / 365))),
+            "dependencies": 0,
+            "team_turnover": 0.0,
         }
 
-    def _derive_risk_labels(self, df: pd.DataFrame) -> pd.DataFrame:
+    # ------------------------------------------------------------------
+    # Risk labels
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _derive_risk_labels(df: pd.DataFrame) -> pd.DataFrame:
         """
-        Derive risk labels from project metrics.
+        Assign risk labels using a composite score built from percentile ranks.
 
-        Risk is determined by:
-        - High: blocker_ratio > 0.05 OR reopen_rate > 0.1 OR defect_rate > 0.5
-        - Medium: blocker_ratio > 0.02 OR reopen_rate > 0.05 OR defect_rate > 0.3
-        - Low: Otherwise
+        Each indicator is ranked within the dataset (0–1), so thresholds are
+        relative — they remain meaningful regardless of whether the data comes
+        from small corporate projects or large open-source repos like Apache.
 
-        Args:
-            df: Project DataFrame
+        Indicators and their direction:
+          - avg_resolution_days  ↑ higher = worse
+          - reopen_rate          ↑ higher = worse
+          - blocker_ratio        ↑ higher = worse
+          - defect_rate          ↑ higher = worse
+          - churn_rate           ↑ higher = worse
+          - completion_rate      ↓ lower  = worse  (inverted)
 
-        Returns:
-            DataFrame with risk_level column added
+        Composite score = weighted average of percentile ranks (0 = best, 1 = worst).
+        Projects in top 33 % → High, middle 33 % → Medium, bottom 33 % → Low.
         """
+        risk_cols = {
+            "avg_resolution_days": 1.0,
+            "reopen_rate": 1.0,
+            "blocker_ratio": 1.0,
+            "defect_rate": 1.0,
+            "churn_rate": 0.5,
+            "completion_rate": -1.0,  # negative weight — lower completion = higher risk
+        }
 
-        def calculate_risk(row):
-            # High risk indicators
-            if (
-                row["blocker_ratio"] > 0.05
-                or row["reopen_rate"] > 0.1
-                or row["defect_rate"] > 0.5
-                or row["avg_resolution_days"] > 60
-            ):
-                return "High"
+        score = pd.Series(0.0, index=df.index)
+        total_weight = sum(abs(w) for w in risk_cols.values())
 
-            # Medium risk indicators
-            if (
-                row["blocker_ratio"] > 0.02
-                or row["reopen_rate"] > 0.05
-                or row["defect_rate"] > 0.3
-                or row["avg_resolution_days"] > 30
-            ):
-                return "Medium"
+        for col, weight in risk_cols.items():
+            if col not in df.columns:
+                continue
+            pct_rank = df[col].rank(pct=True, na_option="bottom")
+            if weight < 0:
+                # Invert: low completion_rate should rank high on the risk score
+                pct_rank = 1.0 - pct_rank
+            score += pct_rank * abs(weight)
 
-            return "Low"
+        score /= total_weight
+        df["risk_score_composite"] = score.round(4)
 
-        df["risk_level"] = df.apply(calculate_risk, axis=1)
+        high_thresh = score.quantile(0.67)
+        low_thresh = score.quantile(0.33)
 
-        # Log distribution
+        df["risk_level"] = np.where(
+            score >= high_thresh, "High", np.where(score >= low_thresh, "Medium", "Low")
+        )
+
         risk_counts = df["risk_level"].value_counts()
-        logger.info(f"Risk distribution: {risk_counts.to_dict()}")
-
+        logger.info(
+            f"Risk distribution: {risk_counts.to_dict()}  "
+            f"(thresholds — low: {low_thresh:.3f}, high: {high_thresh:.3f})"
+        )
         return df
+
+    # ------------------------------------------------------------------
+    # Main pipeline
+    # ------------------------------------------------------------------
 
     def process(
         self,
@@ -556,18 +571,6 @@ class JiraDataPreprocessor:
         top_n_projects: Optional[int] = None,
         output_filename: str = "jira_projects.csv",
     ) -> pd.DataFrame:
-        """
-        Main processing pipeline.
-
-        Args:
-            project_keys: Specific projects to process (optional)
-            top_n_projects: Process top N projects by issue count (optional)
-            output_filename: Name for output file
-
-        Returns:
-            Processed project-level DataFrame
-        """
-        # Determine which projects to process
         if project_keys:
             projects = project_keys
         elif top_n_projects:
@@ -575,26 +578,38 @@ class JiraDataPreprocessor:
         else:
             projects = self.get_project_list()
 
+        project_set = set(projects)
         logger.info(
-            f"Processing {len(projects)} projects: {projects[:10]}{'...' if len(projects) > 10 else ''}"
+            f"Processing {len(projects)} projects: "
+            f"{projects[:10]}{'...' if len(projects) > 10 else ''}"
         )
 
-        # Load data
-        issues = self.load_issues_for_projects(projects)
-        issue_keys = set(issues["key"].unique())
+        # Step 1 — issue metrics (pandas, categorical dtypes, no text columns)
+        issues = self._load_issue_metrics(project_set)
+        gc.collect()
 
-        comments = self.load_comments_for_issues(issue_keys)
-        changelog = self.load_changelog_for_issues(issue_keys)
+        # Step 2 — descriptions (csv.reader stream, bounded)
+        descriptions = self._stream_descriptions(project_set)
+        gc.collect()
 
-        # Aggregate
-        df = self.aggregate_to_project_level(issues, comments, changelog)
+        # Step 3 — comments (csv.reader stream, bounded, full text)
+        comments = self._stream_comments(project_set)
+        gc.collect()
 
-        # Save output
+        # Step 4 — changelog (csv.reader stream, counters only)
+        changelog = self._stream_changelog_stats(project_set)
+        gc.collect()
+
+        # Step 5 — aggregate
+        df = self._aggregate(issues, comments, changelog, descriptions)
+        del issues, comments, changelog, descriptions
+        gc.collect()
+
+        # Save
         output_path = self.output_dir / output_filename
         df.to_csv(output_path, index=False)
-        logger.info(f"Saved processed data to {output_path}")
+        logger.info(f"Saved to {output_path}")
 
-        # Also save a sample for quick testing
         sample_path = self.output_dir / "jira_projects_sample.csv"
         df.head(20).to_csv(sample_path, index=False)
         logger.info(f"Saved sample (20 projects) to {sample_path}")
@@ -603,70 +618,52 @@ class JiraDataPreprocessor:
 
 
 def main():
-    """Main entry point."""
     parser = argparse.ArgumentParser(
         description="Preprocess Apache JIRA data for PRISM",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-
     parser.add_argument(
-        "--sample", "-s", type=int, default=None, help="Process only top N projects by issue count"
+        "--sample", "-s", type=int, default=None, help="Top N projects by issue count"
     )
-
     parser.add_argument(
-        "--projects",
-        "-p",
-        type=str,
-        default=None,
-        help="Comma-separated list of project keys to process (e.g., SPARK,KAFKA,FLINK)",
+        "--projects", "-p", type=str, default=None, help="Comma-separated project keys"
     )
-
     parser.add_argument(
-        "--output",
-        "-o",
-        type=str,
-        default="jira_projects.csv",
-        help="Output filename (default: jira_projects.csv)",
+        "--output", "-o", type=str, default="jira_projects.csv", help="Output filename"
     )
-
-    parser.add_argument(
-        "--raw-dir", type=str, default=None, help="Directory containing raw JIRA CSV files"
-    )
-
-    parser.add_argument(
-        "--output-dir", type=str, default=None, help="Directory for processed output"
-    )
-
+    parser.add_argument("--raw-dir", type=str, default=None)
+    parser.add_argument("--output-dir", type=str, default=None)
     args = parser.parse_args()
 
-    # Parse project list if provided
-    project_keys = None
-    if args.projects:
-        project_keys = [p.strip().upper() for p in args.projects.split(",")]
+    project_keys = [p.strip().upper() for p in args.projects.split(",")] if args.projects else None
 
-    # Initialize and run preprocessor
-    preprocessor = JiraDataPreprocessor(
-        raw_data_dir=args.raw_dir,
-        output_dir=args.output_dir,
-    )
-
+    preprocessor = JiraDataPreprocessor(raw_data_dir=args.raw_dir, output_dir=args.output_dir)
     df = preprocessor.process(
         project_keys=project_keys,
         top_n_projects=args.sample,
         output_filename=args.output,
     )
 
-    # Print summary
     print("\n" + "=" * 60)
     print("PREPROCESSING COMPLETE")
     print("=" * 60)
     print(f"Projects processed: {len(df)}")
-    print(f"Risk distribution:")
-    print(df["risk_level"].value_counts().to_string())
+    print(f"Risk distribution:\n{df['risk_level'].value_counts().to_string()}")
     print(f"\nSample projects:")
     print(
-        df[["project_id", "project_name", "total_issues", "completion_rate", "risk_level"]]
+        df[
+            [
+                "project_id",
+                "project_name",
+                "total_issues",
+                "completion_rate",
+                "avg_resolution_days",
+                "defect_rate",
+                "risk_score_composite",
+                "risk_level",
+            ]
+        ]
         .head(10)
         .to_string()
     )

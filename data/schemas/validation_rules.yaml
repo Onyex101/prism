@@ -4,13 +4,13 @@
 # ==============================================================================
 # Required Fields Validation
 # ==============================================================================
+# Must match ``required`` in ``project_schema.json``. Budget/spent are optional
+# (e.g. JIRA-derived rows may omit them); financial rules apply when present.
 required_fields:
   - project_id
   - project_name
   - start_date
   - planned_end_date
-  - budget
-  - spent
   - planned_hours
   - actual_hours
   - team_size

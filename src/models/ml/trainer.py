@@ -4,8 +4,9 @@ ML Trainer Module
 
 This module handles training and tuning of ML models for risk prediction.
 
-It supports multiple model types (Random Forest, XGBoost, LightGBM) and
-provides cross-validation and hyperparameter tuning capabilities.
+It supports multiple model types (Logistic Regression, SVC, Extra Trees, Random Forest,
+XGBoost, LightGBM) and provides cross-validation and hyperparameter tuning
+capabilities.
 
 Example:
     >>> from src.models.ml.trainer import MLTrainer
@@ -15,14 +16,18 @@ Example:
 
 import json
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import joblib
 import numpy as np
 import pandas as pd
 from loguru import logger
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV, cross_val_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.svm import SVC
 
 try:
     from xgboost import XGBClassifier
@@ -75,7 +80,7 @@ class MLTrainer:
         Initialize the trainer.
 
         :param model_type: Type of model to train. Options: "random_forest",
-            "xgboost", "lightgbm".
+            "extra_trees", "logistic_regression", "svc", "xgboost", "lightgbm".
         :type model_type: str
         :param random_state: Random seed for reproducibility.
         :type random_state: int
@@ -87,9 +92,57 @@ class MLTrainer:
         self.cv_scores: list = []
         self.feature_names: list[str] = []
 
+    def _build_random_forest(self, params: dict[str, Any]) -> Any:
+        return RandomForestClassifier(**params)
+
+    def _build_extra_trees(self, params: dict[str, Any]) -> Any:
+        return ExtraTreesClassifier(**params)
+
+    def _build_logistic_regression(self, params: dict[str, Any]) -> Any:
+        lr_params = {k: v for k, v in params.items() if k != "random_state"}
+        return Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                (
+                    "lr",
+                    LogisticRegression(
+                        random_state=self.random_state,
+                        max_iter=2000,
+                        **lr_params,
+                    ),
+                ),
+            ]
+        )
+
+    def _build_svc(self, params: dict[str, Any]) -> Any:
+        svc_params = {k: v for k, v in params.items() if k != "random_state"}
+        return Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                (
+                    "svc",
+                    SVC(
+                        kernel="rbf",
+                        probability=True,
+                        random_state=self.random_state,
+                        **svc_params,
+                    ),
+                ),
+            ]
+        )
+
+    def _build_xgboost(self, params: dict[str, Any]) -> Any:
+        return XGBClassifier(eval_metric="logloss", **params)
+
+    def _build_lightgbm(self, params: dict[str, Any]) -> Any:
+        return LGBMClassifier(verbose=-1, **params)
+
     def get_model(self, **params: Any) -> Any:
         """
         Get a model instance.
+
+        Model types are registered in a small factory map (open/closed: add a
+        builder method and one registry entry instead of growing ``if`` chains).
 
         :param params: Model parameters to override defaults.
         :return: Model instance.
@@ -99,26 +152,28 @@ class MLTrainer:
             >>> trainer = MLTrainer(model_type="random_forest")
             >>> model = trainer.get_model(n_estimators=200)
         """
-        default_params = {"random_state": self.random_state}
+        default_params: dict[str, Any] = {"random_state": self.random_state}
         default_params.update(params)
 
-        if self.model_type == "random_forest":
-            return RandomForestClassifier(**default_params)
+        registry: dict[str, Callable[[dict[str, Any]], Any]] = {
+            "random_forest": self._build_random_forest,
+            "extra_trees": self._build_extra_trees,
+            "logistic_regression": self._build_logistic_regression,
+            "svc": self._build_svc,
+        }
+        if XGBOOST_AVAILABLE:
+            registry["xgboost"] = self._build_xgboost
+        if LIGHTGBM_AVAILABLE:
+            registry["lightgbm"] = self._build_lightgbm
 
-        if self.model_type == "xgboost" and XGBOOST_AVAILABLE:
-            return XGBClassifier(
-                use_label_encoder=False,
-                eval_metric="logloss",
-                **default_params,
-            )
-
-        if self.model_type == "lightgbm" and LIGHTGBM_AVAILABLE:
-            return LGBMClassifier(verbose=-1, **default_params)
+        builder = registry.get(self.model_type)
+        if builder is not None:
+            return builder(default_params)
 
         logger.warning(
             f"Model type {self.model_type} not available, using RandomForest"
         )
-        return RandomForestClassifier(**default_params)
+        return self._build_random_forest(default_params)
 
     def train(
         self,
@@ -312,27 +367,31 @@ class MLTrainer:
             >>> print(comparison)
         """
         model_types = self._get_available_model_types()
+        original_model_type = self.model_type
         results = []
 
-        for model_type in model_types:
-            self.model_type = model_type
-            model = self.get_model()
+        try:
+            for model_type in model_types:
+                self.model_type = model_type
+                model = self.get_model()
 
-            scores = cross_val_score(model, X, y, cv=cv, scoring=scoring)
+                scores = cross_val_score(model, X, y, cv=cv, scoring=scoring)
 
-            results.append(
-                {
-                    "model": model_type,
-                    "mean_score": float(np.mean(scores)),
-                    "std_score": float(np.std(scores)),
-                    "min_score": float(np.min(scores)),
-                    "max_score": float(np.max(scores)),
-                }
-            )
+                results.append(
+                    {
+                        "model": model_type,
+                        "mean_score": float(np.mean(scores)),
+                        "std_score": float(np.std(scores)),
+                        "min_score": float(np.min(scores)),
+                        "max_score": float(np.max(scores)),
+                    }
+                )
 
-            logger.info(
-                f"{model_type}: {np.mean(scores):.3f} (+/- {np.std(scores):.3f})"
-            )
+                logger.info(
+                    f"{model_type}: {np.mean(scores):.3f} (+/- {np.std(scores):.3f})"
+                )
+        finally:
+            self.model_type = original_model_type
 
         return pd.DataFrame(results).sort_values("mean_score", ascending=False)
 
@@ -354,7 +413,7 @@ class MLTrainer:
         :return: List of model type names.
         :rtype: list[str]
         """
-        model_types = ["random_forest"]
+        model_types = ["random_forest", "extra_trees", "logistic_regression", "svc"]
         if XGBOOST_AVAILABLE:
             model_types.append("xgboost")
         if LIGHTGBM_AVAILABLE:

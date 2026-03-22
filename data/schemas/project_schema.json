@@ -8,8 +8,6 @@
     "project_name",
     "start_date",
     "planned_end_date",
-    "budget",
-    "spent",
     "planned_hours",
     "actual_hours",
     "team_size",
@@ -55,18 +53,6 @@
       "description": "Actual completion date (null if not completed)",
       "examples": ["2024-07-15", null]
     },
-    "budget": {
-      "type": "number",
-      "description": "Total project budget in USD",
-      "minimum": 0,
-      "examples": [150000.00]
-    },
-    "spent": {
-      "type": "number",
-      "description": "Current spend in USD",
-      "minimum": 0,
-      "examples": [125000.00]
-    },
     "planned_hours": {
       "type": "integer",
       "description": "Estimated total effort in hours",
@@ -92,6 +78,18 @@
       "minimum": 0,
       "maximum": 100,
       "examples": [75.5]
+    },
+    "budget": {
+      "type": "number",
+      "description": "Planned budget (optional; JIRA pipeline may omit)",
+      "minimum": 0,
+      "examples": [150000]
+    },
+    "spent": {
+      "type": "number",
+      "description": "Amount spent to date (optional; JIRA pipeline may omit)",
+      "minimum": 0,
+      "examples": [125000]
     },
     "status": {
       "type": "string",

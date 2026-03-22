@@ -54,7 +54,7 @@ class TestDataPipeline:
         engineer = FeatureEngineer()
         featured_df = engineer.create_features(loaded_df)
         assert "schedule_performance_index" in featured_df.columns
-        assert "cost_performance_index" in featured_df.columns
+        assert "hours_variance_pct" in featured_df.columns
 
         # Preprocess
         preprocessor = DataPreprocessor()

@@ -5,7 +5,6 @@ Machine Learning Models Module
 This module provides ML model training, prediction, and evaluation.
 
 Classes:
-    BaseModel: Abstract base class for ML models.
     MLTrainer: Train and tune ML models.
     MLPredictor: Load models and make predictions.
     ModelEvaluator: Evaluate model performance.
@@ -27,19 +26,17 @@ Example:
     >>> results = evaluator.evaluate(y_test, predictions)
 """
 
-from src.models.ml.base_model import BaseModel
 from src.models.ml.evaluator import ModelEvaluator
 from src.models.ml.predictor import MLPredictor
 
-# Try to import trainer, which may fail if XGBoost is not available
+# Optional tree-based deps (e.g. XGBoost) can fail at import; keep predictor/evaluator usable.
 try:
     from src.models.ml.trainer import MLTrainer
-except Exception:
-    # XGBoost may raise XGBoostError if libomp is not installed
+except (ImportError, OSError):
+    # OSError: optional native libs (e.g. tree libraries) may fail to load
     MLTrainer = None  # type: ignore
 
 __all__ = [
-    "BaseModel",
     "MLTrainer",
     "MLPredictor",
     "ModelEvaluator",

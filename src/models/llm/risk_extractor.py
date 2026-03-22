@@ -115,7 +115,6 @@ class RiskExtractor:
         "resource",
         "schedule",
         "scope",
-        "budget",
     ]
 
     def __init__(self) -> None:

@@ -76,17 +76,36 @@ class FeatureEngineer:
         df = self._create_temporal_features(df, reference_date)
         df = self._create_variance_features(df)
         df = self._create_risk_indicators(df)
+        df = self._ensure_jira_metrics_for_mcda(df)
 
         logger.info(f"Created {len(self.feature_names)} derived features")
 
+        return df
+
+    def _ensure_jira_metrics_for_mcda(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Ensure JIRA-style metrics exist for MCDA / Rankings / Compare radars.
+
+        Processed JIRA CSV provides ``defect_rate``, ``blocker_ratio``, etc. PRISM
+        native uploads (e.g. JSON demos) do not — add **0.0** placeholders so
+        :class:`src.mcda.ranker.ProjectRanker` criteria columns exist (neutral
+        vs portfolio when constant).
+        """
+        for col in (
+            "defect_rate",
+            "blocker_ratio",
+            "reopen_rate",
+            "churn_rate",
+        ):
+            if col not in df.columns:
+                df[col] = 0.0
         return df
 
     def _create_performance_metrics(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Create performance index features.
 
-        Creates SPI (Schedule Performance Index), CPI (Cost Performance Index),
-        and productivity metrics.
+        Creates SPI (Schedule Performance Index) and productivity metrics.
 
         :param df: Input DataFrame.
         :type df: pd.DataFrame
@@ -94,7 +113,6 @@ class FeatureEngineer:
         :rtype: pd.DataFrame
         """
         df = self._create_schedule_performance_index(df)
-        df = self._create_cost_performance_index(df)
         df = self._create_productivity_metric(df)
         return df
 
@@ -119,29 +137,6 @@ class FeatureEngineer:
         )
         df["schedule_performance_index"] = df["schedule_performance_index"].clip(0, 3)
         self.feature_names.append("schedule_performance_index")
-        return df
-
-    def _create_cost_performance_index(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Create Cost Performance Index (CPI).
-
-        CPI > 1 means under budget, CPI < 1 means over budget.
-
-        :param df: Input DataFrame.
-        :type df: pd.DataFrame
-        :return: DataFrame with CPI feature.
-        :rtype: pd.DataFrame
-        """
-        if "budget" not in df.columns or "spent" not in df.columns:
-            return df
-
-        df["cost_performance_index"] = np.where(
-            df["spent"] > 0,
-            df["budget"] / df["spent"],
-            1.0,
-        )
-        df["cost_performance_index"] = df["cost_performance_index"].clip(0, 3)
-        self.feature_names.append("cost_performance_index")
         return df
 
     def _create_productivity_metric(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -264,30 +259,8 @@ class FeatureEngineer:
         :return: DataFrame with variance features.
         :rtype: pd.DataFrame
         """
-        df = self._create_budget_variance(df)
         df = self._create_hours_variance(df)
         df = self._create_schedule_gap(df)
-        df = self._create_budget_utilization(df)
-        return df
-
-    def _create_budget_variance(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Create budget variance percentage feature.
-
-        :param df: Input DataFrame.
-        :type df: pd.DataFrame
-        :return: DataFrame with budget variance.
-        :rtype: pd.DataFrame
-        """
-        if "budget" not in df.columns or "spent" not in df.columns:
-            return df
-
-        df["budget_variance_pct"] = np.where(
-            df["budget"] > 0,
-            ((df["spent"] - df["budget"]) / df["budget"]) * 100,
-            0,
-        )
-        self.feature_names.append("budget_variance_pct")
         return df
 
     def _create_hours_variance(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -328,26 +301,6 @@ class FeatureEngineer:
         self.feature_names.append("schedule_gap")
         return df
 
-    def _create_budget_utilization(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Create budget utilization feature.
-
-        :param df: Input DataFrame.
-        :type df: pd.DataFrame
-        :return: DataFrame with budget utilization.
-        :rtype: pd.DataFrame
-        """
-        if "budget" not in df.columns or "spent" not in df.columns:
-            return df
-
-        df["budget_utilization"] = np.where(
-            df["budget"] > 0,
-            (df["spent"] / df["budget"]) * 100,
-            0,
-        )
-        self.feature_names.append("budget_utilization")
-        return df
-
     def _create_risk_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Create risk indicator features.
@@ -359,7 +312,6 @@ class FeatureEngineer:
         """
         df = self._create_team_stability(df)
         df = self._create_complexity_adjusted_progress(df)
-        df = self._create_burn_rate(df)
         df = self._create_binary_flags(df)
         return df
 
@@ -399,26 +351,6 @@ class FeatureEngineer:
         self.feature_names.append("complexity_adjusted_progress")
         return df
 
-    def _create_burn_rate(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Create burn rate feature (spending per day).
-
-        :param df: Input DataFrame.
-        :type df: pd.DataFrame
-        :return: DataFrame with burn rate.
-        :rtype: pd.DataFrame
-        """
-        if "spent" not in df.columns or "days_since_start" not in df.columns:
-            return df
-
-        df["burn_rate"] = np.where(
-            df["days_since_start"] > 0,
-            df["spent"] / df["days_since_start"],
-            0,
-        )
-        self.feature_names.append("burn_rate")
-        return df
-
     def _create_binary_flags(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Create binary flag features.
@@ -428,10 +360,6 @@ class FeatureEngineer:
         :return: DataFrame with binary flags.
         :rtype: pd.DataFrame
         """
-        if "budget_variance_pct" in df.columns:
-            df["is_over_budget"] = (df["budget_variance_pct"] > 0).astype(int)
-            self.feature_names.append("is_over_budget")
-
         if "schedule_gap" in df.columns:
             df["is_behind_schedule"] = (df["schedule_gap"] > 10).astype(int)
             self.feature_names.append("is_behind_schedule")

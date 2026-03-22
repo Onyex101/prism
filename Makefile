@@ -63,11 +63,11 @@ format:
 
 # Launch Streamlit dashboard
 run:
-	streamlit run app/app.py
+	streamlit run app/main.py
 
 # Run in development mode with auto-reload
 run-dev:
-	streamlit run app/app.py --server.runOnSave=true
+	streamlit run app/main.py --server.runOnSave=true
 
 # Clean cache and build files
 clean:

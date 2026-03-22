@@ -25,6 +25,7 @@ MANIFEST
 
 # Virtual Environments
 venv/
+.venv/
 env/
 ENV/
 env.bak/
@@ -54,14 +55,12 @@ data/processed/*.csv
 data/processed/*.json
 data/synthetic/*.csv
 data/external/*
-!data/raw/sample_projects.csv
 !data/raw/*_template.*
 
 # Models (too large for git)
 models/ml/*.pkl
+!models/ml/best_model.pkl
 models/ml/*.joblib
-models/scalers/*.pkl
-models/encoders/*.pkl
 !models/README.md
 
 # Logs

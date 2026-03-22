@@ -1,28 +1,34 @@
 """
 Compare Projects Page
 
-Side-by-side project comparison.
+Side-by-side comparison using JIRA-aligned metrics and RiskCharts.comparison_radar (notebook 07).
 """
 
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
+from __future__ import annotations
 
-st.set_page_config(page_title="Compare Projects - PRISM", page_icon="🔍", layout="wide")
+import sys
+from pathlib import Path
+
+_p = Path(__file__).resolve().parent
+_repo_root = _p.parent.parent if _p.name == "pages" else _p.parent
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
+import pandas as pd
+import streamlit as st
+
+from app.bootstrap import init_page
+from app.components import RADAR_METRICS_JIRA, normalize_row_against_frame, require_projects_df
+
+init_page()
+
+from src.visualization.risk_charts import RiskCharts
 
 st.title("🔍 Compare Projects")
 st.markdown("Side-by-side comparison of project metrics and risk factors")
 
-# Check if data is loaded
-if "projects_df" not in st.session_state:
-    st.warning("⚠️ No data loaded. Please upload data first.")
-    if st.button("Go to Upload Page"):
-        st.switch_page("pages/2_📁_Upload_Data.py")
-    st.stop()
+df = require_projects_df()
 
-df = st.session_state["projects_df"]
-
-# Project selection
 st.markdown("### Select Projects to Compare")
 
 name_col = "project_name" if "project_name" in df.columns else "project_id"
@@ -44,34 +50,25 @@ if project_a == project_b:
     st.warning("Please select two different projects to compare.")
     st.stop()
 
-# Get project data
 row_a = df[df[name_col] == project_a].iloc[0]
 row_b = df[df[name_col] == project_b].iloc[0]
 
-# Comparison section
 st.markdown("---")
 st.markdown("### Side-by-Side Comparison")
 
-# Metrics comparison
 metrics_to_compare = [
     ("completion_rate", "Completion Rate", "%"),
     ("budget", "Budget", "$"),
     ("spent", "Spent", "$"),
     ("team_size", "Team Size", ""),
-    ("risk_score", "Risk Score", ""),
+    ("defect_rate", "Defect rate", ""),
+    ("blocker_ratio", "Blocker ratio", ""),
+    ("reopen_rate", "Reopen rate", ""),
+    ("churn_rate", "Churn rate", ""),
+    ("risk_score", "ML Risk Score", ""),
     ("mcda_score", "MCDA Score", ""),
 ]
 
-col1, col2, col3 = st.columns([2, 1, 2])
-
-with col1:
-    st.markdown(f"#### {project_a}")
-
-with col2:
-    st.markdown("#### Metric")
-
-with col3:
-    st.markdown(f"#### {project_b}")
 
 def _fmt_val(val, unit):
     if pd.isna(val):
@@ -80,113 +77,78 @@ def _fmt_val(val, unit):
         return f"${val:,.0f}"
     if unit == "%":
         return f"{val:.1f}%"
-    return f"{val:.2f}" if isinstance(val, (int, float)) else str(val)
+    return f"{val:.4f}" if isinstance(val, (int, float)) else str(val)
 
 
 for metric, label, unit in metrics_to_compare:
-    if metric in df.columns:
-        col1, col2, col3 = st.columns([2, 1, 2])
+    if metric not in df.columns:
+        continue
+    c1, c2, c3 = st.columns([2, 1, 2])
+    val_a = row_a[metric]
+    val_b = row_b[metric]
+    with c1:
+        st.write(_fmt_val(val_a, unit))
+    with c2:
+        st.write(f"**{label}**")
+    with c3:
+        st.write(_fmt_val(val_b, unit))
 
-        val_a = row_a[metric]
-        val_b = row_b[metric]
-
-        with col1:
-            st.write(_fmt_val(val_a, unit))
-
-        with col2:
-            st.write(f"**{label}**")
-
-        with col3:
-            st.write(_fmt_val(val_b, unit))
-
-# Radar chart comparison
 st.markdown("---")
-st.markdown("### Visual Comparison")
+st.markdown("### Visual Comparison (JIRA metrics, notebook 07)")
 
-# Prepare radar data - only metrics with valid (non-NaN) values for both projects
-radar_metrics = ["completion_rate", "budget_utilization", "team_size", "risk_score", "mcda_score"]
 available_metrics = [
     m
-    for m in radar_metrics
+    for m in RADAR_METRICS_JIRA
     if m in df.columns
     and pd.notna(row_a.get(m))
     and pd.notna(row_b.get(m))
-]
-# Further filter: col min/max must be finite for normalization
-available_metrics = [
-    m
-    for m in available_metrics
-    if pd.notna(df[m].min())
+    and pd.notna(df[m].min())
     and pd.notna(df[m].max())
 ]
 
+
 if len(available_metrics) >= 3:
-    # Normalize values for radar
-    values_a = []
-    values_b = []
-
-    for metric in available_metrics:
-        col_min = df[metric].min()
-        col_max = df[metric].max()
-        range_val = col_max - col_min if col_max != col_min else 1
-
-        val_a = (row_a[metric] - col_min) / range_val
-        val_b = (row_b[metric] - col_min) / range_val
-
-        values_a.append(val_a)
-        values_b.append(val_b)
-
-    # Close the radar
-    available_metrics_closed = available_metrics + [available_metrics[0]]
-    values_a_closed = values_a + [values_a[0]]
-    values_b_closed = values_b + [values_b[0]]
-
-    fig = go.Figure()
-
-    fig.add_trace(
-        go.Scatterpolar(
-            r=values_a_closed,
-            theta=available_metrics_closed,
-            fill="toself",
-            name=project_a,
-            line_color="#1E88E5",
-        )
-    )
-
-    fig.add_trace(
-        go.Scatterpolar(
-            r=values_b_closed,
-            theta=available_metrics_closed,
-            fill="toself",
-            name=project_b,
-            line_color="#5E35B1",
-        )
-    )
-
-    fig.update_layout(
-        polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
-        showlegend=True,
-        height=500,
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
+    try:
+        projects_payload = [
+            normalize_row_against_frame(row_a, df, available_metrics, name_col),
+            normalize_row_against_frame(row_b, df, available_metrics, name_col),
+        ]
+        fig = RiskCharts.comparison_radar(projects_payload, available_metrics)
+        st.plotly_chart(fig, width="stretch")
+    except Exception as e:
+        st.warning(f"Could not build radar chart: {e}")
 else:
-    st.info("Not enough metrics available for radar chart comparison.")
+    st.info(
+        "Not enough JIRA metrics for radar (need at least 3 of: defect_rate, blocker_ratio, "
+        "reopen_rate, churn_rate, completion_rate)."
+    )
 
-# Text comparison
 if "status_comments" in df.columns:
     st.markdown("---")
     st.markdown("### Status Comments Comparison")
 
-    col1, col2 = st.columns(2)
+    cc1, cc2 = st.columns(2)
 
-    with col1:
+    with cc1:
         st.markdown(f"**{project_a}**")
         comments_a = "" if pd.isna(row_a["status_comments"]) else str(row_a["status_comments"])
-        st.text_area("", comments_a, height=200, disabled=True, key="comments_a")
+        st.text_area(
+            f"Status comments for {project_a}",
+            comments_a,
+            height=200,
+            disabled=True,
+            key="comments_a",
+            label_visibility="collapsed",
+        )
 
-    with col2:
+    with cc2:
         st.markdown(f"**{project_b}**")
         comments_b = "" if pd.isna(row_b["status_comments"]) else str(row_b["status_comments"])
-        st.text_area("", comments_b, height=200, disabled=True, key="comments_b")
+        st.text_area(
+            f"Status comments for {project_b}",
+            comments_b,
+            height=200,
+            disabled=True,
+            key="comments_b",
+            label_visibility="collapsed",
+        )

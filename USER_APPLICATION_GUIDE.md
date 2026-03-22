@@ -194,7 +194,7 @@ PRISM uses a **hybrid AI approach** combining three powerful techniques:
 1. Clone repository: `git clone https://github.com/yourorg/prism.git`
 2. Install dependencies: `pip install -r requirements.txt`
 3. Configure API key: Create `.env` file with `OPENAI_API_KEY=your_key`
-4. Run dashboard: `streamlit run app/app.py`
+4. Run dashboard: `streamlit run app/main.py`
 5. Open browser to `http://localhost:8501`
 
 ### Quick Start (5 Minutes)

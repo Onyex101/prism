@@ -15,12 +15,60 @@ Example:
 
 import json
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import joblib
 import numpy as np
 import pandas as pd
 from loguru import logger
+from sklearn.pipeline import Pipeline
+
+
+def _final_estimator(model: Any) -> Any:
+    """Return the classifier inside a Pipeline, or the model itself."""
+    if isinstance(model, Pipeline):
+        return model.steps[-1][1]
+    return model
+
+
+def positive_class_probability(model: Any, proba: np.ndarray) -> np.ndarray:
+    """
+    Map ``predict_proba`` output to P(high risk) for binary classifiers.
+
+    sklearn orders columns by ``classes_``; ``proba[:, -1]`` is wrong when
+    ``classes_`` is ``[1, 0]`` or string labels like ``['High','Low']`` (High
+    is column 0 after sorting).
+    """
+    proba = np.asarray(proba, dtype=float)
+    if proba.ndim == 1:
+        return proba
+    if proba.shape[1] == 1:
+        return proba[:, 0]
+
+    inner = _final_estimator(model)
+    classes = getattr(inner, "classes_", None)
+    if classes is None:
+        return proba[:, -1]
+
+    classes = np.asarray(classes)
+    n = proba.shape[1]
+    if len(classes) != n:
+        return proba[:, -1]
+
+    # Binary numeric {0,1}: high risk = 1
+    if len(classes) == 2:
+        try:
+            as_float = np.asarray(classes, dtype=float)
+            if set(np.unique(np.round(as_float, 6))).issubset({0.0, 1.0}):
+                idx = int(np.where(as_float == 1)[0][0])
+                return proba[:, idx]
+        except (TypeError, ValueError):
+            pass
+        strs = [str(c) for c in classes]
+        if "High" in strs:
+            return proba[:, strs.index("High")]
+
+    return proba[:, -1]
 
 
 class MLPredictor:
@@ -106,7 +154,7 @@ class MLPredictor:
         :type scaler_path: Union[str, Path]
 
         Example:
-            >>> predictor.load_scaler("models/scalers/standard_scaler.pkl")
+            >>> predictor.load_scaler("path/to/fitted_scaler.pkl")
         """
         scaler_path = Path(scaler_path)
         if scaler_path.exists():
@@ -152,7 +200,9 @@ class MLPredictor:
 
         if hasattr(self.model, "predict_proba"):
             probas = self.model.predict_proba(X_processed)
-            return probas[:, -1] if probas.ndim > 1 else probas
+            if probas.ndim > 1:
+                return positive_class_probability(self.model, probas)
+            return probas
 
         # Fallback for models without predict_proba
         return self.model.predict(X_processed)
@@ -217,31 +267,49 @@ class MLPredictor:
         if self.model is None:
             raise ValueError("No model loaded. Call load_model first.")
 
-    def _apply_scaler(self, X: pd.DataFrame) -> np.ndarray:
+    def _apply_scaler(self, X: pd.DataFrame) -> pd.DataFrame:
         """
         Apply scaler to data if available.
 
+        If the loaded model is a :class:`sklearn.pipeline.Pipeline`, scaling is
+        already part of the model — an external ``scaler`` is ignored to avoid
+        double-scaling (KISS / correct inference).
+
         :param X: Feature matrix.
         :type X: pd.DataFrame
-        :return: Scaled data.
-        :rtype: np.ndarray
+        :return: Scaled data (preserves DataFrame with column names).
+        :rtype: pd.DataFrame
         """
+        if isinstance(self.model, Pipeline):
+            if self.scaler is not None:
+                logger.warning(
+                    "Model is a sklearn Pipeline; ignoring external scaler "
+                    "(preprocessing is inside the pipeline)."
+                )
+            return X
         if self.scaler is not None:
-            return self.scaler.transform(X)
-        return X.values if isinstance(X, pd.DataFrame) else X
+            return pd.DataFrame(
+                self.scaler.transform(X),
+                columns=X.columns if isinstance(X, pd.DataFrame) else None,
+            )
+        return X
 
     def _classify_risk_level(self, probability: float) -> str:
         """
-        Classify risk level based on probability.
+        Classify risk level based on probability of the High-risk class.
 
-        :param probability: Risk probability.
+        The model is trained as binary (High=1 vs Low/Medium=0), so the
+        probability represents confidence of being High-risk. Thresholds
+        map to three display categories for UX purposes only.
+
+        :param probability: Probability of High-risk class (0.0–1.0).
         :type probability: float
-        :return: Risk level string.
+        :return: Risk level string ("High", "Medium", or "Low").
         :rtype: str
         """
         if probability >= 0.6:
             return "High"
-        if probability >= 0.3:
+        if probability >= 0.35:
             return "Medium"
         return "Low"
 

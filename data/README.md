@@ -10,11 +10,10 @@ data/
 │   ├── issues.csv          # Apache JIRA issues (18.5M records, 1.8GB)
 │   ├── comments.csv        # Issue comments (62.4M records, 3.8GB)
 │   ├── changelog.csv       # Issue history (40.5M records, 2.5GB)
-│   ├── issuelinks.csv      # Issue dependencies (390K records, 99MB)
-│   └── sample_projects.csv # Small sample for testing (15 records)
+│   └── issuelinks.csv      # Issue dependencies (390K records, 99MB)
 ├── processed/              # Cleaned and transformed data
-│   ├── jira_projects.csv   # Aggregated project-level data
-│   └── jira_projects_sample.csv  # Sample for quick testing
+│   ├── jira_projects.csv           # Full aggregated project-level data
+│   └── jira_projects_sample.csv    # First 20 projects (quick testing)
 ├── synthetic/              # Generated test data
 ├── external/               # Third-party datasets
 └── schemas/                # Data schema definitions
@@ -58,20 +57,16 @@ data/
 ### Option 1: Kaggle CLI (Recommended)
 
 ```bash
-# Install Kaggle CLI if not installed
 pip install kaggle
 
-# Configure Kaggle API credentials
 # Download kaggle.json from https://www.kaggle.com/settings
 mkdir -p ~/.kaggle
 mv ~/Downloads/kaggle.json ~/.kaggle/
 chmod 600 ~/.kaggle/kaggle.json
 
-# Download the dataset
 cd /path/to/prism
 kaggle datasets download -d tedlozzo/apaches-jira-issues -p data/raw/
 
-# Unzip the files
 cd data/raw
 unzip apaches-jira-issues.zip
 rm apaches-jira-issues.zip
@@ -93,25 +88,35 @@ rm apaches-jira-issues.zip
 After downloading, run the preprocessing script to convert issue-level data to project-level metrics:
 
 ```bash
-# Navigate to project root
 cd /path/to/prism
 
-# Option A: Process top 50 projects (recommended for testing, ~5 min)
+# Option A: Top 50 projects (recommended for testing, ~10 min)
 python scripts/preprocess_jira_data.py --sample 50
 
-# Option B: Process specific projects
+# Option B: Specific projects
 python scripts/preprocess_jira_data.py --projects SPARK,KAFKA,FLINK,HADOOP,HIVE
 
-# Option C: Process all 640 projects (takes ~30-60 min)
+# Option C: All 640 projects
 python scripts/preprocess_jira_data.py
 
 # Check the output
-ls -la data/processed/
+ls -lh data/processed/
 ```
+
+### How the Preprocessing Works
+
+The script processes the four raw JIRA files in a single pass each, staying within memory limits regardless of dataset size:
+
+| Phase | File | Method | Memory |
+|-------|------|--------|--------|
+| Issue metrics | `issues.csv` | pandas chunked, categorical dtypes | ~130 MB for 50 projects |
+| Descriptions | `issues.csv` | csv.reader stream, max 20 per project | Bounded |
+| Comments | `comments.csv` | csv.reader stream, max 500 per project (`MAX_COMMENTS_PER_PROJECT`) | Bounded |
+| Changelog | `changelog.csv` | csv.reader stream, integer counters only | Near zero |
 
 ### Preprocessing Output
 
-The script creates `data/processed/jira_projects.csv` with these columns:
+The script creates `data/processed/jira_projects.csv` with one row per project:
 
 | Column | Description |
 |--------|-------------|
@@ -119,42 +124,71 @@ The script creates `data/processed/jira_projects.csv` with these columns:
 | `project_name` | Full project name |
 | `total_issues` | Total issue count |
 | `open_issues` | Currently open issues |
-| `closed_issues` | Resolved issues |
-| `bug_count` | Number of bugs |
-| `blocker_count` | Critical blocker issues |
+| `closed_issues` | Resolved/closed issues |
+| `bug_count` | Number of bug-type issues |
+| `feature_count` | New feature issues |
+| `improvement_count` | Improvement issues |
+| `task_count` | Task issues |
+| `blocker_count` | Blocker priority issues |
+| `critical_count` | Critical priority issues |
+| `blocker_ratio` | Blockers / total issues |
+| `critical_ratio` | Critical / total issues |
+| `planned_end_date` | Latest issue creation date (last point the project was actively planned) |
+| `actual_end_date` | Latest resolution date (completed projects only; `null` if still active) |
+| `planned_hours` | Estimated (issues × 8h) |
+| `actual_hours` | Derived from open/closed counts |
+| `team_size` | Unique assignees + creators |
+| `unique_assignees` | Distinct assignees |
+| `unique_reporters` | Distinct reporters |
 | `completion_rate` | % of issues resolved |
 | `velocity` | Issues resolved per month |
 | `defect_rate` | Bugs / total issues |
-| `avg_resolution_days` | Mean time to resolve |
-| `reopen_rate` | Issue reopen frequency |
-| `team_size` | Unique contributors |
-| `risk_level` | Derived: High/Medium/Low |
-| `status_comments` | Sampled comments (for LLM) |
-| `project_description` | Combined issue descriptions |
+| `avg_resolution_days` | Mean days from open → resolved |
+| `median_resolution_days` | Median resolution time |
+| `reopen_count` | Total issue reopens |
+| `reopen_rate` | Reopens / closed issues |
+| `status_changes` | Total status field changes |
+| `churn_rate` | Status changes / total issues |
+| `project_duration_days` | First issue → last update |
+| `total_votes` | Sum of issue votes |
+| `total_watchers` | Sum of issue watchers |
+| `complexity_score` | Derived (team size + duration, 1–10) |
+| `risk_level` | Derived: High / Medium / Low |
+| `risk_score_composite` | Composite score (0–1, higher = riskier) |
+| `status_comments` | Sampled comments for LLM (full text) |
+| `project_description` | Sampled issue descriptions for LLM |
+
+### Risk Label Methodology
+
+Risk labels are derived using a **percentile-based composite score** so that results are meaningful across any project portfolio — whether corporate sprints or long-running open source repositories.
+
+Six indicators are percentile-ranked within the dataset, weighted, and averaged into a composite score:
+
+| Indicator | Weight | Direction |
+|-----------|--------|-----------|
+| `avg_resolution_days` | 1.0 | Higher = riskier |
+| `reopen_rate` | 1.0 | Higher = riskier |
+| `blocker_ratio` | 1.0 | Higher = riskier |
+| `defect_rate` | 1.0 | Higher = riskier |
+| `churn_rate` | 0.5 | Higher = riskier |
+| `completion_rate` | 1.0 (inverted) | Lower = riskier |
+
+Projects are then split into thirds:
+- **High** — top 33% composite score
+- **Medium** — middle 33%
+- **Low** — bottom 33%
+
+This ensures a balanced distribution regardless of sample size or the absolute scale of the metrics.
 
 ## Data Privacy & Gitignore
 
 Large data files are **excluded from git** (see `.gitignore`):
 
 ```
-data/raw/*.csv        # Ignored (except sample_projects.csv)
+data/raw/*.csv        # Ignored
 data/raw/*.json       # Ignored
 data/processed/*.csv  # Ignored
 data/external/*       # Ignored
-```
-
-Only `sample_projects.csv` is tracked in git for testing purposes.
-
-## Sample Data
-
-For quick testing without downloading the full dataset, use:
-
-```python
-from src.data.loader import DataLoader
-
-loader = DataLoader()
-df = loader.load_sample_data()  # Loads data/raw/sample_projects.csv
-print(df.head())
 ```
 
 ## Schema Validation
@@ -171,4 +205,3 @@ is_valid, errors = validator.validate(df)
 ## License
 
 The Apache JIRA dataset is sourced from publicly available Apache Foundation issue trackers. Usage is subject to Kaggle's terms of service.
-

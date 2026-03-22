@@ -7,8 +7,8 @@ This module provides functionality for loading project data from various file fo
 Supports both PRISM native format and processed Apache JIRA data.
 
 Data Sources:
-    - PRISM native format (sample_projects.csv)
-    - Processed Apache JIRA data (jira_projects.csv)
+    - PRISM-style CSV/Excel/JSON (e.g. ``data/processed/jira_projects.csv``)
+    - Processed Apache JIRA data (``jira_projects.csv``)
       Source: https://www.kaggle.com/datasets/tedlozzo/apaches-jira-issues
 
 Example:
@@ -18,8 +18,9 @@ Example:
 """
 
 import json
+from io import BytesIO, StringIO
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import pandas as pd
 from loguru import logger
@@ -34,8 +35,9 @@ class DataLoader:
 
     :cvar SUPPORTED_FORMATS: List of supported file extensions.
     :vartype SUPPORTED_FORMATS: list[str]
-    :cvar JIRA_TO_PRISM_MAPPING: Column mapping from JIRA to PRISM format.
-    :vartype JIRA_TO_PRISM_MAPPING: dict[str, str]
+
+    JIRA exports are normalized in :meth:`_normalize_jira_data` (column renames and defaults),
+    not via a separate mapping table.
 
     :ivar last_loaded_path: Path of the last loaded file.
     :vartype last_loaded_path: Optional[Path]
@@ -127,7 +129,7 @@ class DataLoader:
         :rtype: pd.DataFrame
         """
         suffix = file_path.suffix.lower()
-        loaders = {
+        loaders: dict[str, Callable[..., pd.DataFrame]] = {
             ".csv": self._load_csv,
             ".json": self._load_json,
             ".xlsx": self._load_excel,
@@ -182,7 +184,6 @@ class DataLoader:
         """
         df = df.copy()
         df = self._apply_jira_defaults(df)
-        df = self._create_synthetic_budget(df)
         df = self._normalize_dates(df)
         return df
 
@@ -196,8 +197,6 @@ class DataLoader:
         :rtype: pd.DataFrame
         """
         defaults = {
-            "budget": 0,
-            "spent": 0,
             "team_turnover": 0.0,
             "team_feedback": "",
             "stakeholder_notes": "",
@@ -208,24 +207,6 @@ class DataLoader:
                 df[col] = default_value
             else:
                 df[col] = df[col].fillna(default_value)
-        return df
-
-    def _create_synthetic_budget(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Create synthetic budget/spent values if not present.
-
-        :param df: DataFrame to update.
-        :type df: pd.DataFrame
-        :return: DataFrame with budget values.
-        :rtype: pd.DataFrame
-        """
-        if df["budget"].sum() == 0 and "planned_hours" in df.columns:
-            hourly_rate = 100
-            df["budget"] = df["planned_hours"] * hourly_rate
-            if "actual_hours" in df.columns:
-                df["spent"] = df["actual_hours"] * hourly_rate
-            else:
-                df["spent"] = df["budget"] * 0.8
         return df
 
     def _normalize_dates(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -250,13 +231,13 @@ class DataLoader:
                 )
         return df
 
-    def _load_csv(self, file_path: Path, **kwargs) -> pd.DataFrame:
+    def _load_csv(self, source: Union[Path, StringIO], **kwargs) -> pd.DataFrame:
         """
-        Load data from CSV file.
+        Load data from CSV (path or in-memory string buffer).
 
-        :param file_path: Path to CSV file.
-        :type file_path: Path
-        :param kwargs: Additional arguments for pd.read_csv.
+        :param source: File path or ``StringIO`` from uploaded bytes.
+        :type source: Union[Path, StringIO]
+        :param kwargs: Additional arguments for :func:`pandas.read_csv`.
         :return: Loaded DataFrame.
         :rtype: pd.DataFrame
         """
@@ -267,43 +248,50 @@ class DataLoader:
         default_kwargs.update(kwargs)
 
         try:
-            return pd.read_csv(file_path, **default_kwargs)
+            return pd.read_csv(source, **default_kwargs)
         except Exception as e:
             logger.warning(f"Error with date parsing, retrying without: {e}")
             default_kwargs.pop("parse_dates", None)
-            return pd.read_csv(file_path, **default_kwargs)
+            return pd.read_csv(source, **default_kwargs)
 
-    def _load_json(self, file_path: Path, **kwargs) -> pd.DataFrame:
-        """
-        Load data from JSON file.
-
-        :param file_path: Path to JSON file.
-        :type file_path: Path
-        :param kwargs: Additional arguments (unused, for interface consistency).
-        :return: Loaded DataFrame.
-        :rtype: pd.DataFrame
-        """
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
+    @staticmethod
+    def _dataframe_from_json_payload(data: Any) -> pd.DataFrame:
+        """Normalize JSON object/array into a DataFrame."""
         if isinstance(data, list):
             return pd.DataFrame(data)
         if isinstance(data, dict) and "projects" in data:
             return pd.DataFrame(data["projects"])
         return pd.DataFrame([data])
 
-    def _load_excel(self, file_path: Path, **kwargs) -> pd.DataFrame:
+    def _load_json(self, source: Union[Path, StringIO], **kwargs) -> pd.DataFrame:
         """
-        Load data from Excel file.
+        Load data from JSON file or string buffer.
 
-        :param file_path: Path to Excel file.
-        :type file_path: Path
-        :param kwargs: Additional arguments for pd.read_excel.
+        :param source: Path or ``StringIO``.
+        :type source: Union[Path, StringIO]
+        :param kwargs: Reserved for interface consistency.
+        :return: Loaded DataFrame.
+        :rtype: pd.DataFrame
+        """
+        if isinstance(source, Path):
+            with open(source, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = json.load(source)
+        return self._dataframe_from_json_payload(data)
+
+    def _load_excel(self, source: Union[Path, BytesIO], **kwargs) -> pd.DataFrame:
+        """
+        Load data from Excel file or bytes buffer.
+
+        :param source: Path or ``BytesIO``.
+        :type source: Union[Path, BytesIO]
+        :param kwargs: Additional arguments for :func:`pandas.read_excel`.
         :return: Loaded DataFrame.
         :rtype: pd.DataFrame
         """
         sheet_name = kwargs.pop("sheet_name", 0)
-        return pd.read_excel(file_path, sheet_name=sheet_name, **kwargs)
+        return pd.read_excel(source, sheet_name=sheet_name, **kwargs)
 
     def load_jira_data(
         self,
@@ -345,24 +333,23 @@ class DataLoader:
 
     def load_sample_data(self) -> pd.DataFrame:
         """
-        Load the sample projects data for testing/demo.
+        Load processed JIRA sample for testing/demo (same as notebook pipeline output).
 
-        :return: DataFrame with sample project data.
+        :return: DataFrame with project data.
         :rtype: pd.DataFrame
-        :raises FileNotFoundError: If sample data not found.
+        :raises FileNotFoundError: If processed file not found.
 
         Example:
             >>> loader = DataLoader()
             >>> sample_df = loader.load_sample_data()
         """
-        sample_path = (
-            Path(__file__).parent.parent.parent / "data" / "raw" / "sample_projects.csv"
-        )
-
-        if not sample_path.exists():
-            raise FileNotFoundError(f"Sample data not found: {sample_path}")
-
-        return self.load(sample_path)
+        processed = Path(__file__).resolve().parents[2] / "data" / "processed" / "jira_projects.csv"
+        if not processed.exists():
+            raise FileNotFoundError(
+                f"Processed JIRA data not found: {processed}. "
+                "Run: python scripts/preprocess_jira_data.py"
+            )
+        return self.load(processed)
 
     def load_from_bytes(
         self,
@@ -372,6 +359,9 @@ class DataLoader:
     ) -> pd.DataFrame:
         """
         Load data from bytes (e.g., from Streamlit file uploader).
+
+        Uses the same CSV/JSON/Excel helpers as :meth:`load` to avoid duplicated
+        parsing logic.
 
         :param file_bytes: Raw file bytes.
         :type file_bytes: bytes
@@ -386,24 +376,22 @@ class DataLoader:
             >>> loader = DataLoader()
             >>> df = loader.load_from_bytes(uploaded_file.read(), "data.csv")
         """
-        from io import BytesIO, StringIO
-
         suffix = Path(file_name).suffix.lower()
+        if suffix not in self.SUPPORTED_FORMATS:
+            raise ValueError(
+                f"Unsupported format: {suffix}. Supported: {self.SUPPORTED_FORMATS}"
+            )
 
         if suffix == ".csv":
-            df = pd.read_csv(StringIO(file_bytes.decode("utf-8")), **kwargs)
+            df = self._load_csv(StringIO(file_bytes.decode("utf-8")), **kwargs)
         elif suffix == ".json":
-            data = json.loads(file_bytes.decode("utf-8"))
-            if isinstance(data, list):
-                df = pd.DataFrame(data)
-            elif isinstance(data, dict) and "projects" in data:
-                df = pd.DataFrame(data["projects"])
-            else:
-                df = pd.DataFrame([data])
-        elif suffix in [".xlsx", ".xls"]:
-            df = pd.read_excel(BytesIO(file_bytes), **kwargs)
+            df = self._load_json(StringIO(file_bytes.decode("utf-8")), **kwargs)
+        elif suffix in (".xlsx", ".xls"):
+            df = self._load_excel(BytesIO(file_bytes), **kwargs)
         else:
             raise ValueError(f"Unsupported format: {suffix}")
 
-        df = self._detect_and_normalize_format(df)
-        return df
+        self.last_loaded_path = None
+        self.last_loaded_format = suffix
+
+        return self._detect_and_normalize_format(df)

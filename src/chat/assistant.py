@@ -14,6 +14,7 @@ Example:
     >>> response = assistant.chat("Which projects are highest risk?")
 """
 
+import os
 from typing import Any, Optional
 
 import pandas as pd
@@ -76,22 +77,23 @@ Always be constructive and suggest actionable steps when discussing problems."""
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "gpt-3.5-turbo",
+        model: Optional[str] = None,
     ) -> None:
         """
         Initialize the chat assistant.
 
         :param api_key: OpenAI API key.
         :type api_key: Optional[str]
-        :param model: Model to use for chat.
-        :type model: str
+        :param model: Model to use for chat. Defaults to ``OPENAI_MODEL`` env or
+            ``gpt-4.1`` (many orgs no longer allow ``gpt-3.5-turbo`` on new projects).
+        :type model: Optional[str]
         :raises ImportError: If OpenAI package not installed.
         """
         if not OPENAI_AVAILABLE:
             raise ImportError("OpenAI package not installed. Run: pip install openai")
 
         self.api_key = api_key
-        self.model = model
+        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4.1")
         self.client: Optional[OpenAI] = None
         self.conversation_history: list[dict] = []
         self.context_data: dict = {}
@@ -165,7 +167,14 @@ Always be constructive and suggest actionable steps when discussing problems."""
             return response
         except Exception as e:
             logger.error(f"Chat error: {e}")
-            return f"I encountered an error: {str(e)}. Please try again."
+            err = str(e)
+            if "does not have access to model" in err or "model_not_found" in err:
+                return (
+                    "**Model not available** for this API key or project. "
+                    "Choose another model in the Chat sidebar (or set `OPENAI_MODEL` in `.env`). "
+                    f"Details: {err}"
+                )
+            return f"I encountered an error: {err}. Please try again."
 
     def _validate_client(self) -> None:
         """

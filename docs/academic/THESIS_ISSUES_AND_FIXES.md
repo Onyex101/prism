@@ -809,9 +809,9 @@ tasks such as response caching and batch processing.
   hosting infrastructure beyond POC scope
 - **Decision:** OpenAI GPT-5/GPT-4 hybrid for optimal performance-cost balance
 
-**Note:** GPT-5 was publicly released on November 29, 2025. The modular system 
-architecture (config/llm_config.yaml) enables seamless model switching via 
-configuration updates, allowing future model upgrades as they become available.
+**Note:** GPT-5 was publicly released on November 29, 2025. The modular system
+architecture (environment variables and `config/settings.py`) enables model
+selection updates, allowing future model upgrades as they become available.
 ```
 
 **Impact:** MEDIUM - Technical clarity
@@ -1173,8 +1173,8 @@ data provides guidance for future system development"
      (sentiment analysis, basic categorization). GPT-5 was publicly released 
      on November 29, 2025, offering state-of-the-art performance with lower 
      hallucination rates and enhanced reasoning capabilities. The modular 
-     architecture (config/llm_config.yaml) enables seamless model version 
-     switching via configuration updates."
+     architecture (environment variables and application settings) enables
+     model version switching via configuration updates."
      ```
 
 2. **Dataset Source:**
@@ -1249,7 +1249,7 @@ Add note in Phase 4 (LLM Integration):
   or open-source LLaMA 3 (requires local hosting setup)
 
 **Model Version Management:**
-- Configuration-based model selection (config/llm_config.yaml)
+- Configuration-based model selection (e.g. `OPENAI_MODEL` in `.env` / Streamlit secrets)
 - A/B testing framework for comparing GPT-5 vs GPT-4 performance
 - Documented migration path for future model upgrades
 - Template-based prompt engineering compatible with both models

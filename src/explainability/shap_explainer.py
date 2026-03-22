@@ -18,6 +18,7 @@ Reference:
     Model Predictions. NIPS 2017.
 """
 
+import warnings
 from typing import Any, Optional
 
 import numpy as np
@@ -80,6 +81,16 @@ class SHAPExplainer:
         self.shap_values: Optional[np.ndarray] = None
         self.base_value: Optional[float] = None
 
+    def _final_estimator(self) -> Any:
+        """
+        Tree / linear heuristics apply to the last step of a Pipeline, not the wrapper name.
+        """
+        from sklearn.pipeline import Pipeline
+
+        if isinstance(self.model, Pipeline):
+            return self.model.steps[-1][1]
+        return self.model
+
     def fit(self, X: pd.DataFrame) -> "SHAPExplainer":
         """
         Fit the SHAP explainer on training data.
@@ -119,17 +130,21 @@ class SHAPExplainer:
         :return: SHAP explainer instance.
         :rtype: shap.Explainer
         """
-        model_type = type(self.model).__name__
+        final_est = self._final_estimator()
+        model_type = type(final_est).__name__
 
         tree_models = ["Forest", "Gradient", "XGB", "LGBM", "Tree"]
         if any(t in model_type for t in tree_models):
-            logger.info(f"Using TreeExplainer for {model_type}")
-            return shap.TreeExplainer(self.model)
+            logger.debug("Using TreeExplainer for final estimator {}", model_type)
+            return shap.TreeExplainer(final_est)
 
-        # Use KernelExplainer for other models
+        # KernelExplainer needs the full predict_proba (Pipeline applies preprocessing)
         background = shap.sample(X, min(100, len(X)))
-        logger.info(f"Using KernelExplainer for {model_type}")
-        return shap.KernelExplainer(self.model.predict_proba, background)
+        logger.debug("Using KernelExplainer for model type {}", type(self.model).__name__)
+        pred_fn = (
+            self.model.predict_proba if hasattr(self.model, "predict_proba") else self.model.predict
+        )
+        return shap.KernelExplainer(pred_fn, background)
 
     def explain(self, X: pd.DataFrame) -> np.ndarray:
         """
@@ -147,9 +162,16 @@ class SHAPExplainer:
         if self.explainer is None:
             raise ValueError("Explainer not fitted. Call fit() first.")
 
-        self.shap_values = self.explainer.shap_values(X)
+        # LightGBM binary classifiers may emit UserWarning: output is a list of ndarray per class.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r".*LightGBM binary classifier with TreeExplainer.*",
+                category=UserWarning,
+            )
+            self.shap_values = self.explainer.shap_values(X)
 
-        # Handle multi-class output
+        # Handle multi-class output (list of arrays: one per class; use positive / last class)
         if isinstance(self.shap_values, list):
             self.shap_values = self.shap_values[-1]
         elif isinstance(self.shap_values, np.ndarray) and self.shap_values.ndim == 3:

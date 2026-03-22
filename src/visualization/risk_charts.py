@@ -15,6 +15,7 @@ Example:
 
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -276,7 +277,9 @@ class RiskCharts:
             >>> fig = RiskCharts.sentiment_distribution(llm_results_df)
         """
         if "sentiment_score" not in df.columns:
-            raise ValueError("DataFrame must contain 'sentiment_score' column for sentiment_distribution")
+            raise ValueError(
+                "DataFrame must contain 'sentiment_score' column for sentiment_distribution"
+            )
         fig = px.histogram(
             df,
             x="sentiment_score",
@@ -335,6 +338,23 @@ class RiskCharts:
         return fig
 
     @staticmethod
+    def _radial_axis_upper(max_r: float) -> float:
+        """
+        Upper bound for polar radial axis so small normalized values stay visible.
+
+        Values are typically portfolio min–max normalized to [0, 1]. When every
+        spoke is small (e.g. both projects sit low vs the full portfolio), a
+        fixed ``[0, 1]`` radial range collapses the trace to the origin.
+        """
+        if max_r <= 0:
+            return 0.25
+        if max_r >= 0.995:
+            return 1.0
+        # Zoom: e.g. max_r=0.02 → ~0.044 so points sit mid-radius instead of ~2% of the ring
+        r_hi = max_r * 1.2 + 0.02
+        return float(min(1.0, r_hi))
+
+    @staticmethod
     def comparison_radar(
         projects: list[dict],
         metrics: list[str],
@@ -365,24 +385,61 @@ class RiskCharts:
             RiskCharts.COLORS["medium"],
         ]
 
+        all_r: list[float] = []
         for i, project in enumerate(projects[:4]):
             name = project.get("project_name", f"Project {i + 1}")
-            values = [project.get(m, 0) for m in metrics]
-            values.append(values[0])  # Close the radar
+            raw_vals: list[float] = []
+            for m in metrics:
+                v = project.get(m, 0)
+                if pd.isna(v):
+                    v = 0.0
+                raw_vals.append(float(v))
+            all_r.extend(abs(v) for v in raw_vals if np.isfinite(v))
+            row = raw_vals + [raw_vals[0]]  # Close the radar
 
             fig.add_trace(
                 go.Scatterpolar(
-                    r=values,
+                    r=row,
                     theta=metrics + [metrics[0]],
                     name=name,
-                    line_color=colors[i % len(colors)],
+                    line=dict(color=colors[i % len(colors)], width=2.5),
+                    marker=dict(size=5),
                 )
             )
 
-        fig.update_layout(
-            polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
-            title="Project Comparison",
-            height=500,
-        )
+        max_r = max(all_r) if all_r else 0.0
+        r_hi = RiskCharts._radial_axis_upper(max_r)
+        r_tick = ".2e" if r_hi < 0.08 else ".2f"
+
+        layout_updates: dict = {
+            "polar": dict(
+                radialaxis=dict(
+                    visible=True,
+                    range=[0, r_hi],
+                    tickformat=r_tick,
+                )
+            ),
+            "title": "Project Comparison",
+            "height": 500,
+        }
+        if r_hi < 0.99:
+            layout_updates["annotations"] = [
+                dict(
+                    text=(
+                        f"Radial axis scaled to [0, {r_hi:.2f}] so traces stay visible "
+                        "(values are still portfolio-normalized 0–1 per metric)."
+                    ),
+                    showarrow=False,
+                    xref="paper",
+                    yref="paper",
+                    x=0.5,
+                    y=-0.12,
+                    xanchor="center",
+                    font=dict(size=11, color="#666"),
+                )
+            ]
+            layout_updates["margin"] = dict(l=50, r=50, t=60, b=90)
+
+        fig.update_layout(**layout_updates)
 
         return fig

@@ -24,7 +24,8 @@ def main():
     logger.info("Starting model training...")
 
     # Load data
-    data_path = Path(__file__).parent.parent / "data" / "raw" / "sample_projects.csv"
+    # Default: processed Jira pipeline output (see notebooks/README.md)
+    data_path = Path(__file__).parent.parent / "data" / "processed" / "jira_projects.csv"
 
     if not data_path.exists():
         logger.error(f"Data file not found: {data_path}")

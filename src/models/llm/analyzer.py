@@ -14,7 +14,8 @@ Example:
 """
 
 import json
-from typing import Any, Optional
+import time
+from typing import Any, Callable, Optional
 
 from loguru import logger
 
@@ -62,28 +63,33 @@ Focus on these risk categories:
 2. Resource: Staffing, skills, availability, team capacity
 3. Schedule: Timeline concerns, delays, dependencies, blockers
 4. Scope: Requirement changes, feature creep, unclear specifications
-5. Budget: Cost overruns, resource allocation, financial concerns
 
 Always provide structured output in the exact JSON format requested."""
+
+    # ~3000 tokens of input budget for status_comments (leaves room for prompt + response)
+    MAX_COMMENT_CHARS: int = 12_000
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "gpt-3.5-turbo",
+        model: str = "gpt-4.1",
         temperature: float = 0.0,
         max_tokens: int = 1000,
+        request_delay: float = 0.5,
     ) -> None:
         """
         Initialize the LLM analyzer.
 
         :param api_key: OpenAI API key.
         :type api_key: Optional[str]
-        :param model: Model to use (e.g., "gpt-3.5-turbo", "gpt-4").
+        :param model: Model to use (e.g., "gpt-4o-mini", "gpt-4o").
         :type model: str
         :param temperature: Temperature for generation (0.0 for deterministic).
         :type temperature: float
         :param max_tokens: Maximum tokens in response.
         :type max_tokens: int
+        :param request_delay: Seconds to wait between API calls (rate limiting).
+        :type request_delay: float
         :raises ImportError: If OpenAI package not installed.
         """
         if not OPENAI_AVAILABLE:
@@ -93,6 +99,7 @@ Always provide structured output in the exact JSON format requested."""
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.request_delay = request_delay
 
         self.client: Optional[OpenAI] = None
         if api_key:
@@ -130,8 +137,12 @@ Always provide structured output in the exact JSON format requested."""
         if not self._is_valid_text(status_comments):
             return self._empty_result("Insufficient text for analysis")
 
+        # Truncate to MAX_COMMENT_CHARS to stay within model context limits.
+        # status_comments can reach 784k chars for large Apache projects.
+        truncated = self._truncate_text(status_comments, self.MAX_COMMENT_CHARS)
+
         user_prompt = self._build_user_prompt(
-            project_name, status_comments, additional_context
+            project_name, truncated, additional_context
         )
 
         try:
@@ -158,7 +169,37 @@ Always provide structured output in the exact JSON format requested."""
         :return: Whether text is valid.
         :rtype: bool
         """
+        # Coerce to str first — pandas reads missing status_comments as float NaN,
+        # which has no .strip() method and would raise AttributeError.
+        if not isinstance(text, str):
+            text = "" if text != text else str(text)  # NaN check via self-inequality
         return bool(text and len(text.strip()) >= 10)
+
+    def _truncate_text(self, text: str, max_chars: int) -> str:
+        """
+        Truncate text to a maximum character length.
+
+        Truncates at a sentence boundary when possible to preserve coherence.
+
+        :param text: Text to truncate.
+        :type text: str
+        :param max_chars: Maximum number of characters.
+        :type max_chars: int
+        :return: Truncated text.
+        :rtype: str
+        """
+        if len(text) <= max_chars:
+            return text
+
+        truncated = text[:max_chars]
+        last_sentence = truncated.rfind(". ")
+        if last_sentence > max_chars * 0.8:
+            truncated = truncated[: last_sentence + 1]
+
+        logger.debug(
+            f"Truncated text from {len(text):,} to {len(truncated):,} chars"
+        )
+        return truncated + " [truncated]"
 
     def _call_api(self, project_name: str, user_prompt: str) -> dict:
         """
@@ -311,6 +352,8 @@ Respond with a JSON object containing:
         projects: list[dict],
         text_field: str = "status_comments",
         name_field: str = "project_name",
+        *,
+        on_progress: Optional[Callable[[int, int, str, dict[str, Any]], None]] = None,
     ) -> list[dict]:
         """
         Analyze multiple projects.
@@ -321,6 +364,9 @@ Respond with a JSON object containing:
         :type text_field: str
         :param name_field: Field containing project name.
         :type name_field: str
+        :param on_progress: Optional callback ``(done_count, total, project_name, result)``
+            invoked after each project completes (for UI progress bars).
+        :type on_progress: Optional[Callable[[int, int, str, dict[str, Any]], None]]
         :return: List of analysis results.
         :rtype: list[dict]
 
@@ -329,14 +375,23 @@ Respond with a JSON object containing:
             >>> results = analyzer.analyze_batch(projects)
         """
         results = []
+        total = len(projects)
 
-        for project in projects:
+        for i, project in enumerate(projects):
             name = project.get(name_field, "Unknown")
-            text = project.get(text_field, "")
+            raw = project.get(text_field, "")
+            # Convert NaN / None to empty string so analyze_project always receives str
+            text = "" if (raw != raw or raw is None) else str(raw)
 
             result = self.analyze_project(name, text)
             result["project_id"] = project.get("project_id", "")
             results.append(result)
+
+            if on_progress is not None:
+                on_progress(i + 1, total, name, result)
+
+            if self.request_delay > 0 and i < len(projects) - 1:
+                time.sleep(self.request_delay)
 
         logger.info(f"Analyzed {len(results)} projects")
 
