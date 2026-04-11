@@ -1,7 +1,7 @@
 # PRISM - Predictive Risk Intelligence for Software Management
 # Multi-stage build for Streamlit app
 
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 

@@ -71,7 +71,7 @@ skip = [".git", "venv", ".venv", "data", "models", "notebooks"]
 known_first_party = ["src", "app"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
