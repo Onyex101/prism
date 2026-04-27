@@ -65,6 +65,30 @@ class Settings:
     STREAMLIT_SERVER_PORT: int = int(os.getenv("STREAMLIT_SERVER_PORT", "8501"))
     STREAMLIT_SERVER_ADDRESS: str = os.getenv("STREAMLIT_SERVER_ADDRESS", "localhost")
 
+    # Jira Cloud OAuth 2.0 (3LO) — register app at https://developer.atlassian.com/console/myapps
+    JIRA_OAUTH_CLIENT_ID: Optional[str] = os.getenv("JIRA_OAUTH_CLIENT_ID")
+    JIRA_OAUTH_CLIENT_SECRET: Optional[str] = os.getenv("JIRA_OAUTH_CLIENT_SECRET")
+    JIRA_OAUTH_REDIRECT_URI: Optional[str] = os.getenv("JIRA_OAUTH_REDIRECT_URI")
+    JIRA_OAUTH_SCOPES: str = os.getenv(
+        "JIRA_OAUTH_SCOPES",
+        "read:jira-work read:jira-user offline_access",
+    )
+    JIRA_MAX_ISSUES_PER_PROJECT: int = int(os.getenv("JIRA_MAX_ISSUES_PER_PROJECT", "2000"))
+
+    @classmethod
+    def jira_oauth_configured(cls) -> bool:
+        """
+        Return ``True`` if OAuth client id, secret, and redirect URI are set.
+
+        :return: Whether Jira OAuth env vars are complete.
+        :rtype: bool
+        """
+        return bool(
+            cls.JIRA_OAUTH_CLIENT_ID
+            and cls.JIRA_OAUTH_CLIENT_SECRET
+            and cls.JIRA_OAUTH_REDIRECT_URI
+        )
+
     @classmethod
     def validate(cls) -> list[str]:
         """Validate required settings and return list of errors."""

@@ -17,6 +17,7 @@ if str(_repo_root) not in sys.path:
 import streamlit as st
 
 from app.bootstrap import init_page
+from app.jira_oauth_ui import build_jira_stack, query_param_first
 from app.streamlit_theme import (
     ACCENT_BLUE,
     RISK_COLOR_HIGH,
@@ -26,6 +27,22 @@ from app.streamlit_theme import (
 
 # Wide layout + sidebar styles (same as every multipage script; must be first st.* calls)
 init_page()
+
+# OAuth callback when redirect URI is the app root (optional)
+from config.settings import settings as _settings
+
+if _settings.jira_oauth_configured():
+    _code = query_param_first(st.query_params, "code")
+    _state = query_param_first(st.query_params, "state")
+    if _code and _state:
+        try:
+            _flow, _, _ = build_jira_stack(_settings, st.session_state)
+            _flow.exchange_code(_code, _state)
+            st.session_state.pop("jira_oauth_url", None)
+            st.query_params.clear()
+            st.switch_page("pages/2_📁_Upload_Data.py")
+        except Exception as exc:
+            st.error(f"Atlassian login failed: {exc}")
 
 # Custom CSS (colors from app.streamlit_theme for consistency with charts)
 st.markdown(

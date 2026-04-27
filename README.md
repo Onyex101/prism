@@ -148,6 +148,7 @@ prism/
 │   │   ├── validator.py          # Data validation
 │   │   ├── preprocessor.py       # Preprocessing pipeline
 │   │   ├── feature_engineer.py   # Feature creation
+│   │   ├── jira_aggregator.py    # Issue-level → project metrics (shared)
 │   │   └── generator.py          # Synthetic data (for testing)
 │   │
 │   ├── models/                   # ML and LLM models
@@ -171,6 +172,11 @@ prism/
 │   │
 │   ├── visualization/            # Charts and visualizations
 │   │   └── risk_charts.py        # Plotly charts
+│   │
+│   ├── integrations/             # External PM tools (Jira Cloud OAuth, …)
+│   │   ├── jira_oauth.py
+│   │   ├── jira_cloud.py
+│   │   └── jira_sync_service.py
 │   │
 │   └── utils/                    # Utilities
 │       ├── logger.py             # Logging configuration
@@ -217,6 +223,12 @@ prism/
 - OpenAI API key ([get one here](https://platform.openai.com/api-keys)) - for LLM features
 - macOS users: `brew install libomp` (for XGBoost support)
 
+If you use **pyenv**, you can create or reuse a dedicated virtualenv (for example the project’s `prism` env) instead of a local `venv/` folder:
+
+```bash
+pyenv activate prism   # or: pyenv shell prism
+```
+
 ### Installation
 
 ```bash
@@ -224,7 +236,7 @@ prism/
 git clone https://github.com/Onyex101/prism.git
 cd prism
 
-# 2. Create virtual environment
+# 2. Create and activate a virtual environment (or use pyenv: pyenv activate prism)
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
@@ -298,6 +310,20 @@ python scripts/preprocess_jira_data.py
 ```
 
 See [data/README.md](data/README.md) for full download instructions and schema documentation.
+
+### Jira Cloud (live)
+
+Connect PRISM directly to your Jira Cloud site with **OAuth 2.0 (3LO)** (no CSV export required).
+
+1. Register an OAuth 2.0 (3LO) app at [Atlassian Developer Console](https://developer.atlassian.com/console/myapps).
+2. Add **Jira API** scopes: `read:jira-work`, `read:jira-user`, and `offline_access` (refresh token).
+3. Set the **Callback URL** to the exact URL you use for this app (for example `http://localhost:8501/` for the home page, or the Upload Data page URL shown in the browser). It must match the value of `JIRA_OAUTH_REDIRECT_URI` in `.env`.
+4. Copy the app’s **Client ID** and **Client secret** into `.env` (see `env_template.txt` for `JIRA_OAUTH_*` variables).
+5. Start the dashboard (`streamlit run app/main.py`), open **Upload Data** → **Connect to Jira**, click **Login with Atlassian**, then pick projects and sync.
+
+If your Atlassian account has access to multiple Jira Cloud sites, you will be prompted to choose a site before syncing.
+
+For extension points and how to add another connector (Azure DevOps, Linear, Monday, …), see [src/integrations/README.md](src/integrations/README.md).
 
 ---
 

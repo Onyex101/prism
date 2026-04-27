@@ -42,3 +42,15 @@ LLM_TIMEOUT=30
 # =============================================================================
 STREAMLIT_SERVER_PORT=8501
 STREAMLIT_SERVER_ADDRESS=localhost
+
+# =============================================================================
+# Jira Cloud — OAuth 2.0 (3LO)
+# =============================================================================
+# Create an OAuth 2.0 (3LO) app: https://developer.atlassian.com/console/myapps
+# Add callback URL to match your app (e.g. http://localhost:8501/ or the exact
+# Upload Data page URL from the browser). Scopes below are typical for read-only.
+JIRA_OAUTH_CLIENT_ID=
+JIRA_OAUTH_CLIENT_SECRET=
+JIRA_OAUTH_REDIRECT_URI=http://localhost:8501/
+JIRA_OAUTH_SCOPES=read:jira-work read:jira-user offline_access
+JIRA_MAX_ISSUES_PER_PROJECT=2000
