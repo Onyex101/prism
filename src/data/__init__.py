@@ -30,6 +30,7 @@ from src.data.feature_engineer import FeatureEngineer
 from src.data.generator import SyntheticDataGenerator
 from src.data.loader import DataLoader
 from src.data.preprocessor import DataPreprocessor
+from src.data.snapshot_store import SnapshotStore
 from src.data.validator import DataValidator, ValidationResult
 
 __all__ = [
@@ -38,5 +39,6 @@ __all__ = [
     "ValidationResult",
     "DataPreprocessor",
     "FeatureEngineer",
+    "SnapshotStore",
     "SyntheticDataGenerator",
 ]

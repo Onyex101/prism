@@ -89,6 +89,24 @@ PRISM provides:
 - **Recommendations:** Context-aware suggestions based on analysis results
 - **Conversation memory:** Multi-turn dialogues
 
+### 6. Risk Trend Tracking
+- **Timestamped snapshots** saved automatically after every ML Analysis and Rankings run
+- **Per-project line charts** showing risk score evolution over time
+- **Crisis detection:** Surfaces projects escalating Low → Medium → High across consecutive snapshots
+- **Source filtering:** View ML-only, MCDA-only, or all snapshots
+
+### 7. Risk Response Engine
+- **Offline, rule-based PMBOK recommendations** — no API key required
+- **Nine rule conditions** covering risk score, blocker ratio, completion rate, defect rate, team turnover, reopen rate, churn rate, schedule performance, and moderate risk acceptance
+- **Integrated into Rankings page** — recommended actions shown per project alongside MCDA scores
+- **Supplements (does not replace) the LLM** — always available regardless of API key status
+
+### 8. SUS Usability Survey
+- **10-question System Usability Scale** built into the dashboard
+- **Automatic SUS scoring** (formula-based, range 0–100) with A/B/C/F grade and adjective
+- **Aggregate results view** — mean score, respondent count, score distribution chart
+- **CSV export** for thesis documentation
+
 ---
 
 ## 🏗️ System Architecture
@@ -140,7 +158,9 @@ prism/
 │       ├── 4_💬_LLM_Insights.py
 │       ├── 5_📈_Rankings.py
 │       ├── 6_🔍_Compare_Projects.py
-│       └── 7_💭_Chat_Assistant.py
+│       ├── 7_💭_Chat_Assistant.py
+│       ├── 8_📉_Risk_Trends.py
+│       └── 9_📋_Usability_Survey.py
 │
 ├── src/                          # Core source code
 │   ├── data/                     # Data processing modules
@@ -148,6 +168,7 @@ prism/
 │   │   ├── validator.py          # Data validation
 │   │   ├── preprocessor.py       # Preprocessing pipeline
 │   │   ├── feature_engineer.py   # Feature creation
+│   │   ├── snapshot_store.py     # Risk snapshot persistence
 │   │   └── generator.py          # Synthetic data (for testing)
 │   │
 │   ├── models/                   # ML and LLM models
@@ -171,6 +192,10 @@ prism/
 │   │
 │   ├── visualization/            # Charts and visualizations
 │   │   └── risk_charts.py        # Plotly charts
+│   │
+│   ├── risk_response/            # Risk Response Engine
+│   │   ├── __init__.py
+│   │   └── engine.py             # PMBOK rule-based recommendations
 │   │
 │   └── utils/                    # Utilities
 │       ├── logger.py             # Logging configuration
@@ -214,8 +239,8 @@ prism/
 
 - Python 3.10 or higher
 - pip package manager
-- OpenAI API key ([get one here](https://platform.openai.com/api-keys)) - for LLM features
 - macOS users: `brew install libomp` (for XGBoost support)
+- OpenAI API key ([get one here](https://platform.openai.com/api-keys)) — **optional**, only for LLM Analysis and Chat Assistant pages
 
 ### Installation
 
@@ -231,9 +256,11 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Configure environment (optional, for LLM features)
+# 4. Configure environment (required for LLM features, optional otherwise)
 cp env_template.txt .env
-# Edit .env and add your OPENAI_API_KEY=sk-...
+# Edit .env and set OPENAI_API_KEY=sk-...
+# The key is read exclusively from the environment — there is no UI input field.
+# All other features (ML Analysis, Rankings, Risk Trends, Usability Survey) work without a key.
 
 # 5. Run tests to verify installation
 pytest tests/

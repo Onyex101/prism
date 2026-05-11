@@ -75,36 +75,12 @@ st.markdown("### LLM Configuration")
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    env_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if env_key:
-        st.success(
-            "OpenAI API key is configured via **environment** (Streamlit secrets or `.env`). "
-            "It is not shown or entered on this page."
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        st.warning(
+            "OPENAI_API_KEY not set. Add it to .env or Streamlit secrets to run new LLM analyses. "
+            "Cached results below remain visible."
         )
-        api_key = env_key
-    else:
-        st.markdown(
-            """
-<style>
-/* Discourage selecting/copying the masked API key from the browser */
-section.main div[data-testid="stTextInput"] input[type="password"] {
-    -webkit-user-select: none !important;
-    -moz-user-select: none !important;
-    -ms-user-select: none !important;
-    user-select: none !important;
-}
-</style>
-""",
-            unsafe_allow_html=True,
-        )
-        api_key = st.text_input(
-            "OpenAI API Key",
-            type="password",
-            key="llm_insights_openai_key",
-            placeholder="sk-...",
-            autocomplete="off",
-            help="Paste once per session; input is masked. Prefer OPENAI_API_KEY in Streamlit secrets or `.env` so the key never appears here.",
-        ).strip()
 
     _idx = OPENAI_MODEL_OPTIONS.index(st.session_state.openai_model)
     model = st.selectbox("Model", OPENAI_MODEL_OPTIONS, index=_idx)

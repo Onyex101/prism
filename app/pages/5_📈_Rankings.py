@@ -140,6 +140,14 @@ if st.button("🎯 Calculate Rankings", type="primary"):
             st.session_state["projects_df"] = merged
             st.session_state["rankings_df"] = rankings_df
             st.session_state["last_ranker"] = ranker
+
+            try:
+                from src.data.snapshot_store import SnapshotStore
+
+                SnapshotStore().save_snapshot(merged, source="mcda")
+            except Exception:
+                pass
+
             st.success("✅ Rankings calculated!")
         except Exception as e:
             st.error(f"Ranking failed: {e}")
@@ -272,5 +280,81 @@ if "mcda_score" in disp_df.columns:
                     )
             except Exception as e:
                 st.info(f"Sensitivity analysis unavailable: {e}")
+
+    # ── Risk Response Engine ─────────────────────────────────────────────────
+    st.markdown("---")
+    with st.expander("🛡️ Recommended Actions (Risk Response Engine)", expanded=True):
+        st.markdown(
+            "Rule-based PMBOK response strategies derived from project metrics. "
+            "These recommendations are available offline — no API key required."
+        )
+
+        try:
+            from src.risk_response.engine import RiskResponseEngine
+
+            engine = RiskResponseEngine()
+
+            _STRATEGY_COLOUR = {
+                "Avoid": "#FF4B4B",
+                "Transfer": "#FFA500",
+                "Mitigate": "#1E88E5",
+                "Accept": "#00CC66",
+            }
+
+            top_n = st.slider(
+                "Projects to analyse",
+                min_value=1,
+                max_value=min(20, len(disp_df)),
+                value=min(10, len(disp_df)),
+                key="rre_top_n",
+            )
+
+            target_df = (
+                disp_df.sort_values("rank").head(top_n)
+                if "rank" in disp_df.columns
+                else disp_df.head(top_n)
+            )
+            name_col = "project_name" if "project_name" in target_df.columns else "project_id"
+
+            any_response = False
+            for _, row in target_df.iterrows():
+                responses = engine.get_responses(row.to_dict())
+                if not responses:
+                    continue
+                any_response = True
+                project_label = row.get(name_col, row.get("project_id", "Unknown"))
+                risk_label = row.get("mcda_risk_level", row.get("risk_level", ""))
+                colour = _STRATEGY_COLOUR.get("Avoid", "#ccc")
+                if risk_label == "High":
+                    colour = _STRATEGY_COLOUR["Avoid"]
+                elif risk_label == "Medium":
+                    colour = _STRATEGY_COLOUR["Mitigate"]
+
+                st.markdown(
+                    f"**{project_label}** "
+                    f"<span style='background:{colour};color:#fff;padding:2px 8px;"
+                    f"border-radius:4px;font-size:0.8em'>{risk_label or 'N/A'}</span>",
+                    unsafe_allow_html=True,
+                )
+                for resp in responses:
+                    badge_colour = _STRATEGY_COLOUR.get(resp.strategy, "#888")
+                    st.markdown(
+                        f"<span style='background:{badge_colour};color:#fff;padding:2px 8px;"
+                        f"border-radius:4px;font-size:0.75em;margin-right:6px'>"
+                        f"{resp.strategy}</span> "
+                        f"**{resp.trigger}** — {resp.recommendation}",
+                        unsafe_allow_html=True,
+                    )
+                st.markdown("")
+
+            if not any_response:
+                st.success(
+                    "No risk response actions triggered for the selected projects. "
+                    "All metrics are within acceptable thresholds."
+                )
+
+        except Exception as exc:
+            st.warning(f"Risk Response Engine unavailable: {exc}")
+
 else:
     st.info("Click **Calculate Rankings** to generate MCDA-based project prioritization.")

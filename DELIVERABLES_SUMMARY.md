@@ -241,13 +241,41 @@ prism/
 The implementation phase is **complete**. All core components are in place:
 
 - **Foundation:** Development environment, folder structure, dependencies, sample datasets, CI/CD (GitHub Actions), Docker
-- **Data:** DataLoader (CSV, JSON, Excel, JIRA), DataValidator, FeatureEngineer, DataPreprocessor, SyntheticDataGenerator
+- **Data:** DataLoader (CSV, JSON, Excel, JIRA), DataValidator, FeatureEngineer, DataPreprocessor, SyntheticDataGenerator, **SnapshotStore**
 - **Models:** MLTrainer (Random Forest, XGBoost, LightGBM), MLPredictor, LLMAnalyzer, RiskExtractor
 - **MCDA:** TOPSIS, ProjectRanker with sensitivity analysis
 - **Explainability:** SHAPExplainer for model interpretation
-- **UI:** Streamlit app with Dashboard, Upload, ML Analysis, LLM Insights, Rankings, Compare, Chat Assistant
+- **Risk Response Engine:** Rule-based PMBOK recommendations (`src/risk_response/engine.py`) — offline, no API key required
+- **UI:** Streamlit app with Dashboard, Upload, ML Analysis, LLM Insights, Rankings, Compare, Chat Assistant, **Risk Trends**, **Usability Survey**
 - **Scripts:** train_models.py, evaluate_system.py, preprocess_jira_data.py
 - **Tests:** 109 unit and integration tests
+
+### ✅ Additional Features (April 2026)
+
+#### Risk Trend Tracking (`app/pages/8_📉_Risk_Trends.py`)
+- Timestamped snapshots saved automatically after every ML Analysis or Rankings run
+- Per-project Plotly line charts with colour-coded risk bands (High/Medium/Low)
+- Crisis detection table: projects escalating Low → Medium → High across 3+ consecutive snapshots
+- Powered by `src/data/snapshot_store.py` (appends to `data/processed/risk_snapshots.csv`)
+
+#### Risk Response Engine (`src/risk_response/engine.py`)
+- Pure-Python, offline module — no API key required
+- Nine rules covering: risk score thresholds, blocker ratio, completion rate, defect rate, team turnover, reopen rate, churn rate, schedule performance index, and moderate-risk acceptance
+- PMBOK strategies: Avoid, Transfer, Mitigate, Accept
+- Integrated into Rankings page as "Recommended Actions" expander — always visible regardless of LLM availability
+
+#### SUS Usability Survey (`app/pages/9_📋_Usability_Survey.py`)
+- 10 standard SUS questions rendered as `st.select_slider` (Strongly Disagree → Strongly Agree)
+- Automatic SUS score calculation (formula: odd-question converted score + even-question converted score × 2.5)
+- Grade bands: A > 80.3, B ≥ 68, C ≥ 51, F < 51
+- Responses persisted to `data/processed/sus_responses.csv`
+- Aggregate results tab: mean SUS, respondent count, score distribution histogram
+- CSV download button for thesis evidence
+
+#### OpenAI API Key — Environment-Only
+- Removed `st.text_input` API key fields from LLM Insights (page 4) and Chat Assistant (page 7)
+- Key read exclusively from `OPENAI_API_KEY` environment variable (`.env` or Streamlit secrets)
+- Status banner shown on both pages; cached results remain visible when key is absent
 
 See PROJECT_STRATEGY.md for roadmap details and future enhancement ideas.
 

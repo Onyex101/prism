@@ -13,7 +13,9 @@ data/
 │   └── issuelinks.csv      # Issue dependencies (390K records, 99MB)
 ├── processed/              # Cleaned and transformed data
 │   ├── jira_projects.csv           # Full aggregated project-level data
-│   └── jira_projects_sample.csv    # First 20 projects (quick testing)
+│   ├── jira_projects_sample.csv    # First 20 projects (quick testing)
+│   ├── risk_snapshots.csv          # Timestamped risk snapshots (auto-generated)
+│   └── sus_responses.csv           # SUS usability survey responses (auto-generated)
 ├── synthetic/              # Generated test data
 ├── external/               # Third-party datasets
 └── schemas/                # Data schema definitions
@@ -179,6 +181,41 @@ Projects are then split into thirds:
 - **Low** — bottom 33%
 
 This ensures a balanced distribution regardless of sample size or the absolute scale of the metrics.
+
+## Auto-Generated Files in `processed/`
+
+### `risk_snapshots.csv`
+
+Created and appended to automatically every time the **ML Analysis** (page 3) or **Rankings** (page 5) page completes a run. Stores one row per project per run.
+
+| Column | Description |
+|--------|-------------|
+| `snapshot_id` | UUID shared by all rows in the same run |
+| `timestamp` | ISO-8601 UTC timestamp of the run |
+| `source` | `"ml"` (ML Analysis) or `"mcda"` (Rankings) |
+| `project_id` | Project key or identifier |
+| `project_name` | Project display name |
+| `risk_score` | ML risk score (0–1); NaN for MCDA-only runs |
+| `risk_level` | ML risk level (High/Medium/Low); empty for MCDA-only runs |
+| `mcda_score` | TOPSIS MCDA score; NaN for ML-only runs |
+| `mcda_risk_level` | MCDA risk level; empty for ML-only runs |
+
+Used by the **Risk Trends** page (page 8) to plot per-project risk evolution over time and detect escalating risk patterns.
+
+### `sus_responses.csv`
+
+Appended to when a respondent submits the **Usability Survey** (page 9).
+
+| Column | Description |
+|--------|-------------|
+| `timestamp` | ISO-8601 UTC submission time |
+| `respondent` | Name or alias (optional, defaults to "Anonymous") |
+| `role` | Respondent role (optional) |
+| `q1`–`q10` | Raw SUS responses (1 = Strongly Disagree, 5 = Strongly Agree) |
+| `sus_score` | Calculated SUS score (0–100) |
+| `grade` | Letter grade + adjective (e.g., "B – Good") |
+
+Use the **Export Responses to CSV** button on the Usability Survey page to download this file for thesis documentation. This file is **not** committed to version control (see `.gitignore`).
 
 ## Data Privacy & Gitignore
 

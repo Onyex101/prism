@@ -39,7 +39,7 @@ I can help you understand:
 - Recommendations to reduce risk
 - Comparisons between projects
 
-Enter your OpenAI API key in the sidebar and load project data to get started.
+Load project data to get started.
 Try asking: "Which projects are highest risk?" or "Why is Project X high risk?"
 """,
         }
@@ -48,13 +48,11 @@ Try asking: "Which projects are highest risk?" or "Why is Project X high risk?"
 with st.sidebar:
     st.markdown("### Chat Configuration")
 
-    default_key = os.getenv("OPENAI_API_KEY", "")
-    api_key = st.text_input(
-        "OpenAI API Key",
-        value=default_key,
-        type="password",
-        help="Required for AI responses. Or set OPENAI_API_KEY in .env",
-    )
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if api_key:
+        st.success("OpenAI API key configured via environment.")
+    else:
+        st.warning("OPENAI_API_KEY not set. Chat will fall back to keyword-only responses.")
 
     st.caption(f"**LLM model:** `{chat_model}` — same as **LLM Insights** (change it there).")
 

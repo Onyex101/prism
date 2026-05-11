@@ -696,9 +696,11 @@ capabilities, limitations, and gaps that the proposed SPRM model addresses.
 
 ## CONTENT GAPS (Enhance Depth - Priority 4)
 
-### 15. **MISSING DATASET INFORMATION**
+### 15. **MISSING DATASET INFORMATION** ✅ RESOLVED
 
 **Issue:** No discussion of what datasets you'll use for training/evaluation
+
+**Resolution (April 2026):** The system uses the Apache JIRA Issues dataset (18.5 million raw issues, 701,857 project-level records after preprocessing). Full dataset documentation including source, schema, download instructions, and risk label methodology is in `data/README.md`. The preprocessing script (`scripts/preprocess_jira_data.py`) converts raw issue data into 35+ project-level ML features.
 
 **Where to Add:** New subsection in Chapter 1 (Methodology) or beginning of Chapter 2
 
@@ -1022,11 +1024,12 @@ hypotheses guide the experimental design and evaluation:
 - **Test:** Sensitivity analysis with multiple weight configurations, Kendall's 
   tau calculation.
 
-**H5: User Acceptance**
+**H5: User Acceptance** *(SUS survey implemented — April 2026)*
 - **Hypothesis:** SPRM system achieves System Usability Scale (SUS) score ≥ 70 
   and task success rate ≥ 80% in user acceptance testing with project managers.
 - **Null Hypothesis (H0):** SUS score < 60 (below average usability).
 - **Test:** SUS questionnaire, task completion observation, satisfaction survey.
+- **Status:** ✅ The 10-question SUS survey is now built into the dashboard (page 9). Results are persisted to `data/processed/sus_responses.csv` and can be exported via the download button for thesis documentation.
 
 **Statistical Significance:**
 All hypothesis tests employ α = 0.05 significance level. Effect sizes (Cohen's d, 
@@ -1133,6 +1136,22 @@ data provides guidance for future system development"
 **Impact:** LOW - Completeness
 
 **Status:** ⚠️ Add before final submission
+
+---
+
+---
+
+## IMPLEMENTATION UPDATES (April 2026)
+
+The following supervisor-noted gaps have been addressed in the codebase:
+
+| Issue | Resolution | File(s) |
+|-------|-----------|---------|
+| SUS usability testing not implemented | 10-question SUS survey built into dashboard with score calculation, CSV persistence, and aggregate results | `app/pages/9_📋_Usability_Survey.py` |
+| No risk response recommendations | Rule-based Risk Response Engine implements PMBOK strategies (Avoid/Transfer/Mitigate/Accept) — offline, no API key required | `src/risk_response/engine.py` |
+| Dataset size unclear / undocumented | 18.5M raw JIRA issues → 701,857 project-level records; full schema and methodology in data/README.md | `data/README.md` |
+| No temporal risk tracking | Timestamped snapshots saved after each ML/MCDA run; Risk Trends page plots evolution over time | `app/pages/8_📉_Risk_Trends.py`, `src/data/snapshot_store.py` |
+| API key exposed in UI | Key input fields removed; read exclusively from OPENAI_API_KEY env variable | `app/pages/4_💬_LLM_Insights.py`, `app/pages/7_💭_Chat_Assistant.py` |
 
 ---
 

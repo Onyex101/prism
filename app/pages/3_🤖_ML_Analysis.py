@@ -167,6 +167,13 @@ if run_clicked:
             st.session_state["projects_df"] = df_fe
             st.session_state["ml_importance_df"] = importance_df
 
+            try:
+                from src.data.snapshot_store import SnapshotStore
+
+                SnapshotStore().save_snapshot(df_fe, source="ml")
+            except Exception:
+                pass
+
             st.success("✅ ML analysis complete!")
         except Exception as e:
             st.error(f"Analysis failed: {e}")
