@@ -75,15 +75,79 @@ def require_auth() -> None:
     Requires ``[auth]`` and ``[auth.auth0]`` entries in ``.streamlit/secrets.toml``
     (local) or the Streamlit Cloud secrets panel (production).
     """
-    if not st.experimental_user.is_logged_in:
-        st.login("auth0")
+    if not st.user.is_logged_in:
+        st.markdown(
+            """
+<style>
+    [data-testid="stAppViewContainer"] > .main {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .login-card {
+        background: #ffffff;
+        border: 1px solid #e8ecf0;
+        border-radius: 16px;
+        padding: 3rem 3.5rem;
+        max-width: 420px;
+        width: 100%;
+        text-align: center;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+        margin: auto;
+    }
+    .login-logo {
+        font-size: 4rem;
+        line-height: 1;
+        margin-bottom: 0.25rem;
+    }
+    .login-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1E88E5;
+        margin-bottom: 0.25rem;
+    }
+    .login-subtitle {
+        font-size: 0.95rem;
+        color: #888;
+        margin-bottom: 2rem;
+    }
+    .login-divider {
+        border: none;
+        border-top: 1px solid #e8ecf0;
+        margin: 1.5rem 0;
+    }
+    .login-footer {
+        font-size: 0.78rem;
+        color: #aaa;
+        margin-top: 1.5rem;
+    }
+</style>
+<div class="login-card">
+    <div class="login-logo">🔮</div>
+    <div class="login-title">PRISM</div>
+    <div class="login-subtitle">Predictive Risk Intelligence for Software Management</div>
+    <hr class="login-divider">
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+        _, col, _ = st.columns([1, 2, 1])
+        with col:
+            if st.button("Log in with Auth0", use_container_width=True, type="primary"):
+                st.login("auth0")
+        st.markdown(
+            '<p class="login-footer" style="text-align:center;color:#aaa;font-size:0.78rem;">'
+            "Secure login powered by Auth0</p>",
+            unsafe_allow_html=True,
+        )
         st.stop()
 
     with st.sidebar:
         st.markdown("---")
-        st.caption(f"Logged in as {st.experimental_user.email}")
+        st.caption(f"Logged in as {st.user.email}")
         if st.button("Logout", key="__logout__"):
             st.logout()
+            st.stop()
 
 
 def init_page() -> Path:
