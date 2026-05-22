@@ -64,9 +64,31 @@ def bootstrap_env() -> Path:
     return root
 
 
+def require_auth() -> None:
+    """
+    Enforce Auth0 login for the current page.
+
+    If the user is not authenticated, trigger the Auth0 OIDC login flow and
+    stop page execution. When authenticated, render a logout control at the
+    bottom of the sidebar so it appears consistently across all pages.
+
+    Requires ``[auth]`` and ``[auth.auth0]`` entries in ``.streamlit/secrets.toml``
+    (local) or the Streamlit Cloud secrets panel (production).
+    """
+    if not st.experimental_user.is_logged_in:
+        st.login("auth0")
+        st.stop()
+
+    with st.sidebar:
+        st.markdown("---")
+        st.caption(f"Logged in as {st.experimental_user.email}")
+        if st.button("Logout", key="__logout__"):
+            st.logout()
+
+
 def init_page() -> Path:
     """
-    Full setup for multipage scripts: env, **wide layout**, and sidebar styles.
+    Full setup for multipage scripts: env, **wide layout**, sidebar styles, and auth gate.
 
     Call once at the top of each page (after the usual ``sys.path`` shim that
     allows ``import app``).
@@ -99,5 +121,7 @@ def init_page() -> Path:
     if "openai_model" not in st.session_state:
         raw = os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
         st.session_state.openai_model = normalize_openai_model(raw)
+
+    require_auth()
 
     return root
